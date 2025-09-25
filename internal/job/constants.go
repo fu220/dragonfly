@@ -42,6 +42,21 @@ const (
 	// GCJob is the name of gc job.
 	GCJob = "gc"
 
+	// PreheatCacheJob is the name of preheat cache job.
+	PreheatCacheJob = "preheat_cache"
+
+	// SyncCachePeersJob is the name of syncing cache peers job.
+	SyncCachePeersJob = "sync_cache_peers"
+
+	// GetCacheTaskJob is the name of getting cache task job.
+	GetCacheTaskJob = "get_cache_task"
+
+	// DeleteCacheTaskJob is the name of deleting cache task job.
+	DeleteCacheTaskJob = "delete_cache_task"
+
+	// GetCacheImageDistributionJob is the job name of getting image distribution.
+	GetCacheImageDistributionJob = "get_cache_image_distribution"
+
 	// GroupJobStateConcurrencyLimit is the concurrency limit of group job state.
 	GroupJobStateConcurrencyLimit = 10
 )

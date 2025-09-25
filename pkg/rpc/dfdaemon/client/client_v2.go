@@ -101,6 +101,15 @@ type V2 interface {
 	// DeletePersistentCacheTask deletes persistent cache task from p2p network.
 	DeletePersistentCacheTask(context.Context, *dfdaemonv2.DeletePersistentCacheTaskRequest, ...grpc.CallOption) error
 
+	// DownloadCacheTask downloads cache task from p2p network.
+	DownloadCacheTask(context.Context, string, *dfdaemonv2.DownloadCacheTaskRequest, ...grpc.CallOption) (dfdaemonv2.DfdaemonUpload_DownloadCacheTaskClient, error)
+
+	// StatCacheTask stats cache task information.
+	StatCacheTask(context.Context, *dfdaemonv2.StatCacheTaskRequest, ...grpc.CallOption) (*commonv2.CacheTask, error)
+
+	// DeleteCacheTask deletes cache task from p2p network.
+	DeleteCacheTask(context.Context, *dfdaemonv2.DeleteCacheTaskRequest, ...grpc.CallOption) error
+
 	// Close tears down the ClientConn and all underlying connections.
 	Close() error
 }
@@ -190,5 +199,31 @@ func (v *v2) DeletePersistentCacheTask(ctx context.Context, req *dfdaemonv2.Dele
 	defer cancel()
 
 	_, err := v.DfdaemonUploadClient.DeletePersistentCacheTask(ctx, req, opts...)
+	return err
+}
+
+// DownloadCacheTask downloads cache task from p2p network.
+func (v *v2) DownloadCacheTask(ctx context.Context, taskID string, req *dfdaemonv2.DownloadCacheTaskRequest, opts ...grpc.CallOption) (dfdaemonv2.DfdaemonUpload_DownloadCacheTaskClient, error) {
+	return v.DfdaemonUploadClient.DownloadCacheTask(
+		context.WithValue(ctx, pkgbalancer.ContextKey, taskID),
+		req,
+		opts...,
+	)
+}
+
+// StatCacheTask stats cache task information.
+func (v *v2) StatCacheTask(ctx context.Context, req *dfdaemonv2.StatCacheTaskRequest, opts ...grpc.CallOption) (*commonv2.CacheTask, error) {
+	ctx, cancel := context.WithTimeout(ctx, contextTimeout)
+	defer cancel()
+
+	return v.DfdaemonUploadClient.StatCacheTask(ctx, req, opts...)
+}
+
+// DeleteCacheTask deletes cache task from p2p network.
+func (v *v2) DeleteCacheTask(ctx context.Context, req *dfdaemonv2.DeleteCacheTaskRequest, opts ...grpc.CallOption) error {
+	ctx, cancel := context.WithTimeout(ctx, contextTimeout)
+	defer cancel()
+
+	_, err := v.DfdaemonUploadClient.DeleteCacheTask(ctx, req, opts...)
 	return err
 }

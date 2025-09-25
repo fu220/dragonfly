@@ -43,6 +43,7 @@ import (
 	"d7y.io/dragonfly/v2/scheduler/metrics"
 	"d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	"d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 	"d7y.io/dragonfly/v2/scheduler/rpcserver"
 	"d7y.io/dragonfly/v2/scheduler/scheduling"
 )
@@ -72,6 +73,9 @@ type Server struct {
 
 	// Persistent cache resource interface.
 	persistentCacheResource persistentcache.Resource
+
+	// Cache resource interface.
+	cacheResource standardcache.Resource
 
 	// Dynamic config.
 	dynconfig config.DynconfigInterface
@@ -167,6 +171,13 @@ func New(ctx context.Context, cfg *config.Config, d dfpath.Dfpath) (*Server, err
 	}
 	s.resource = resource
 
+	// Initialize cache resource.
+	cacheResource, err := standardcache.New(cfg, s.gc, seedPeerClientTransportCredentials)
+	if err != nil {
+		return nil, err
+	}
+	s.cacheResource = cacheResource
+
 	// Initialize seed peer client transport credentials.
 	peerClientTransportCredentials := rpc.NewInsecureCredentials()
 	if cfg.Peer.TLS != nil {
@@ -217,7 +228,7 @@ func New(ctx context.Context, cfg *config.Config, d dfpath.Dfpath) (*Server, err
 		schedulerServerOptions = append(schedulerServerOptions, grpc.Creds(rpc.NewInsecureCredentials()))
 	}
 
-	svr := rpcserver.New(cfg, resource, s.persistentCacheResource, scheduling, s.job, dynconfig, schedulerServerOptions...)
+	svr := rpcserver.New(cfg, resource, cacheResource, s.persistentCacheResource, scheduling, s.job, dynconfig, schedulerServerOptions...)
 	s.grpcServer = svr
 
 	// Initialize metrics.
@@ -278,6 +289,15 @@ func (s *Server) Serve() error {
 		logger.Info("resource start successfully")
 	}()
 
+	// Serve cache resource.
+	go func() {
+		if err := s.cacheResource.Serve(); err != nil {
+			logger.Fatalf("cache resource start failed: %s", err.Error())
+		}
+
+		logger.Info("cache resource start successfully")
+	}()
+
 	// Generate GRPC listener.
 	ip, ok := ip.FormatIP(s.config.Server.ListenIP.String())
 	if !ok {
@@ -314,6 +334,13 @@ func (s *Server) Stop() {
 		logger.Errorf("stop resource failed %s", err.Error())
 	} else {
 		logger.Info("stop resource closed")
+	}
+
+	// Stop cacheResource.
+	if err := s.cacheResource.Stop(); err != nil {
+		logger.Errorf("stop cacheResource failed %s", err.Error())
+	} else {
+		logger.Info("stop cacheResource closed")
 	}
 
 	// Stop GC.

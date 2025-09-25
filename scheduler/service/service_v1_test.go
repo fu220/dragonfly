@@ -54,6 +54,7 @@ import (
 	"d7y.io/dragonfly/v2/scheduler/config"
 	configmocks "d7y.io/dragonfly/v2/scheduler/config/mocks"
 	resource "d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 	"d7y.io/dragonfly/v2/scheduler/scheduling"
 	"d7y.io/dragonfly/v2/scheduler/scheduling/mocks"
 )
@@ -104,6 +105,16 @@ var (
 	mockURLMetaRange = "0-9"
 	mockPieceMD5     = digest.New(digest.AlgorithmMD5, "86d3f3a95c324c9479bd8986968f4327")
 	mockPiece        = resource.Piece{
+		Number:      1,
+		ParentID:    "foo",
+		Offset:      2,
+		Length:      10,
+		Digest:      mockPieceMD5,
+		TrafficType: commonv2.TrafficType_REMOTE_PEER,
+		Cost:        1 * time.Minute,
+		CreatedAt:   time.Now(),
+	}
+	mockCachePiece = standardcache.Piece{
 		Number:      1,
 		ParentID:    "foo",
 		Offset:      2,

@@ -37,6 +37,7 @@ import (
 	"d7y.io/dragonfly/v2/pkg/idgen"
 	pkgtypes "d7y.io/dragonfly/v2/pkg/types"
 	resource "d7y.io/dragonfly/v2/scheduler/resource/standard"
+	cacheResource "d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 )
 
 // SyncPeers is an interface for sync peers. It is only supported in Rust client,
@@ -45,7 +46,7 @@ type SyncPeers interface {
 	// CreateSyncPeers creates sync peers job, and merge the sync peer results with the data
 	// in the peer table in the database. It is a synchronous operation, and it will returns
 	// an error if the sync peers job is failed.
-	CreateSyncPeers(context.Context, []models.Scheduler) error
+	CreateSyncPeers(context.Context, []models.Scheduler, string) error
 
 	// Serve started sync peers server.
 	Serve()
@@ -75,7 +76,7 @@ func newSyncPeers(cfg *config.Config, job *internaljob.Job, gdb *gorm.DB) (SyncP
 }
 
 // CreateSyncPeers creates sync peers job.
-func (s *syncPeers) CreateSyncPeers(ctx context.Context, schedulers []models.Scheduler) error {
+func (s *syncPeers) CreateSyncPeers(ctx context.Context, schedulers []models.Scheduler, jobType string) error {
 	// Avoid running multiple sync peers jobs at the same time.
 	if !s.mu.TryLock() {
 		return errors.New("sync peers job is running")
@@ -88,15 +89,28 @@ func (s *syncPeers) CreateSyncPeers(ctx context.Context, schedulers []models.Sch
 		log := logger.WithScheduler(scheduler.Hostname, scheduler.IP, uint64(scheduler.SchedulerClusterID))
 
 		// Send sync peer request to scheduler.
-		results, err := s.createSyncPeers(ctx, scheduler)
-		if err != nil {
-			log.Error(err)
-			continue
-		}
-		log.Infof("[sync-peers] sync peers count is %d", len(results))
+		if jobType == internaljob.SyncPeersJob {
+			results, err := s.createSyncPeers(ctx, scheduler)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			log.Infof("[sync-peers] sync peers count is %d", len(results))
 
-		// Merge sync peer results with the data in the peer table.
-		s.mergePeers(ctx, scheduler, results, log)
+			// Merge sync peer results with the data in the peer table.
+			s.mergePeers(ctx, scheduler, results, log)
+		} else if jobType == internaljob.SyncCachePeersJob {
+			results, err := s.createSyncCachePeers(ctx, scheduler)
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+			log.Infof("[sync-cache-peers] sync cache peers count is %d", len(results))
+
+			// Merge sync peer results with the data in the peer table.
+			s.mergeCachePeers(ctx, scheduler, results, log)
+		}
+
 	}
 
 	return nil
@@ -135,8 +149,11 @@ func (s *syncPeers) Serve() {
 			}
 			logger.Infof("[sync-peers] sync peers find schedulers count is %d", len(schedulers))
 
-			if err := s.CreateSyncPeers(ctx, schedulers); err != nil {
+			if err := s.CreateSyncPeers(ctx, schedulers, internaljob.SyncPeersJob); err != nil {
 				logger.Errorf("[sync-peers] sync peers failed: %v", err)
+			}
+			if err := s.CreateSyncPeers(ctx, schedulers, internaljob.SyncCachePeersJob); err != nil {
+				logger.Errorf("[sync-cache-peers] sync cache peers failed: %v", err)
 			}
 		case <-s.done:
 			return
@@ -262,6 +279,149 @@ func (s *syncPeers) mergePeers(ctx context.Context, scheduler models.Scheduler, 
 	peers := make([]*models.Peer, 0, len(syncPeers))
 	for _, syncPeer := range syncPeers {
 		peers = append(peers, &models.Peer{
+			Hostname:           syncPeer.Hostname,
+			Type:               syncPeer.Type.Name(),
+			IDC:                syncPeer.Network.IDC,
+			Location:           syncPeer.Network.Location,
+			IP:                 syncPeer.IP,
+			Port:               syncPeer.Port,
+			DownloadPort:       syncPeer.DownloadPort,
+			ProxyPort:          syncPeer.ProxyPort,
+			ObjectStoragePort:  syncPeer.ObjectStoragePort,
+			State:              models.PeerStateActive,
+			OS:                 syncPeer.OS,
+			Platform:           syncPeer.Platform,
+			PlatformFamily:     syncPeer.PlatformFamily,
+			PlatformVersion:    syncPeer.PlatformVersion,
+			KernelVersion:      syncPeer.KernelVersion,
+			GitVersion:         syncPeer.Build.GitVersion,
+			GitCommit:          syncPeer.Build.GitCommit,
+			BuildPlatform:      syncPeer.Build.Platform,
+			SchedulerClusterID: uint(syncPeer.SchedulerClusterID),
+		})
+	}
+
+	// Avoid save empty slice.
+	if len(peers) > 0 {
+		if err := s.db.WithContext(ctx).CreateInBatches(peers, len(peers)).Error; err != nil {
+			log.Error(err)
+		}
+	}
+}
+
+// createSyncCachePeers creates sync cache peers.
+func (s *syncPeers) createSyncCachePeers(ctx context.Context, scheduler models.Scheduler) ([]*cacheResource.Host, error) {
+	var span trace.Span
+	ctx, span = tracer.Start(ctx, config.SpanSyncPeers, trace.WithSpanKind(trace.SpanKindProducer))
+	defer span.End()
+
+	// Initialize queue.
+	queue, err := getSchedulerQueue(scheduler)
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize task signature.
+	task := &machineryv1tasks.Signature{
+		UUID:       fmt.Sprintf("task_%s", uuid.New().String()),
+		Name:       internaljob.SyncCachePeersJob,
+		RoutingKey: queue.String(),
+	}
+
+	// Send sync peer task to worker.
+	logger.Infof("[sync-cache-peers] create sync cache peers in queue %v, task: %#v", queue, task)
+	asyncResult, err := s.job.Server.SendTaskWithContext(ctx, task)
+	if err != nil {
+		logger.Errorf("[sync-cache-peers] create sync cache peers in queue %v failed", queue, err)
+		return nil, err
+	}
+
+	// Get sync peer task result.
+	results, err := asyncResult.GetWithTimeout(s.config.Job.SyncPeers.Timeout, DefaultTaskPollingInterval)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal sync peer task result.
+	var hosts []*cacheResource.Host
+	if err := internaljob.UnmarshalResponse(results, &hosts); err != nil {
+		return nil, err
+	}
+
+	return hosts, nil
+}
+
+// Merge sync cache peer results with the data in the peer table.
+func (s *syncPeers) mergeCachePeers(ctx context.Context, scheduler models.Scheduler, results []*cacheResource.Host, log *logger.SugaredLoggerOnWith) {
+	// Convert sync cache peer results from slice to map.
+	syncPeers := make(map[string]*cacheResource.Host, len(results))
+	for _, result := range results {
+		// Skip the sync peer that does not belong to the scheduler cluster,
+		// it is only supported in Rust client. The golang client lacks the
+		// SchedulerClusterID field.
+		if result.SchedulerClusterID == 0 {
+			continue
+		}
+
+		syncPeers[result.ID] = result
+	}
+
+	oldPeers := make([]*models.CachePeer, 0, s.config.Job.SyncPeers.BatchSize)
+	if err := s.db.WithContext(ctx).Model(&models.CachePeer{}).Where("scheduler_cluster_id = ?", scheduler.SchedulerClusterID).FindInBatches(&oldPeers, s.config.Job.SyncPeers.BatchSize, func(tx *gorm.DB, batch int) error {
+		peers := make([]*models.CachePeer, 0, s.config.Job.SyncPeers.BatchSize)
+		for _, oldPeer := range oldPeers {
+			// If the peer exists in the sync peer results, update the peer data in the database with
+			// the sync peer results and delete the sync peer from the sync peers map.
+			isSeedPeer := pkgtypes.ParseHostType(oldPeer.Type) != pkgtypes.HostTypeNormal
+			id := idgen.HostIDV2(oldPeer.IP, oldPeer.Hostname, isSeedPeer)
+			if syncPeer, ok := syncPeers[id]; ok {
+				peers = append(peers, &models.CachePeer{
+					Hostname:           syncPeer.Hostname,
+					Type:               syncPeer.Type.Name(),
+					IDC:                syncPeer.Network.IDC,
+					Location:           syncPeer.Network.Location,
+					IP:                 syncPeer.IP,
+					Port:               syncPeer.Port,
+					DownloadPort:       syncPeer.DownloadPort,
+					ProxyPort:          syncPeer.ProxyPort,
+					ObjectStoragePort:  syncPeer.ObjectStoragePort,
+					State:              models.PeerStateActive,
+					OS:                 syncPeer.OS,
+					Platform:           syncPeer.Platform,
+					PlatformFamily:     syncPeer.PlatformFamily,
+					PlatformVersion:    syncPeer.PlatformVersion,
+					KernelVersion:      syncPeer.KernelVersion,
+					GitVersion:         syncPeer.Build.GitVersion,
+					GitCommit:          syncPeer.Build.GitCommit,
+					BuildPlatform:      syncPeer.Build.Platform,
+					SchedulerClusterID: uint(syncPeer.SchedulerClusterID),
+				})
+
+				// Delete the sync peer from the sync peers map.
+				delete(syncPeers, id)
+			} else {
+				// If the peer does not exist in the sync peer results, delete the peer in the database.
+				if err := tx.Unscoped().Delete(&models.CachePeer{}, oldPeer.ID).Error; err != nil {
+					log.Error(err)
+				}
+			}
+		}
+
+		// Avoid save empty slice.
+		if len(peers) > 0 {
+			tx.Save(&peers)
+		}
+
+		return nil
+	}).Error; err != nil {
+		log.Error(err)
+		return
+	}
+
+	// Insert the sync peers that do not exist in the database into the peer table.
+	peers := make([]*models.CachePeer, 0, len(syncPeers))
+	for _, syncPeer := range syncPeers {
+		peers = append(peers, &models.CachePeer{
 			Hostname:           syncPeer.Hostname,
 			Type:               syncPeer.Type.Name(),
 			IDC:                syncPeer.Network.IDC,

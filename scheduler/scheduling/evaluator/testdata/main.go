@@ -22,6 +22,7 @@ import (
 
 	"d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	"d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 	"d7y.io/dragonfly/v2/scheduler/scheduling/evaluator"
 )
 
@@ -51,6 +52,17 @@ func main() {
 
 	if ok := e.IsBadPersistentCacheParent(&persistentcache.Peer{}); !ok {
 		fmt.Println("IsBadPersistentCacheParent failed")
+		os.Exit(1)
+	}
+
+	candidateCacheParents := e.EvaluateCacheParents([]*standardcache.Peer{&standardcache.Peer{}}, &standardcache.Peer{}, uint32(0))
+	if len(candidateCacheParents) != 1 {
+		fmt.Println("EvaluateCacheParents failed")
+		os.Exit(1)
+	}
+
+	if ok := e.IsBadCacheParent(&standardcache.Peer{}); !ok {
+		fmt.Println("IsBadCacheParent failed")
 		os.Exit(1)
 	}
 }

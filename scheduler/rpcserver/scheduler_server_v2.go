@@ -30,6 +30,7 @@ import (
 	"d7y.io/dragonfly/v2/scheduler/metrics"
 	"d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	"d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 	"d7y.io/dragonfly/v2/scheduler/scheduling"
 	"d7y.io/dragonfly/v2/scheduler/service"
 )
@@ -44,12 +45,13 @@ type schedulerServerV2 struct {
 func newSchedulerServerV2(
 	cfg *config.Config,
 	resource standard.Resource,
+	cacheResource standardcache.Resource,
 	persistentCacheResource persistentcache.Resource,
 	scheduling scheduling.Scheduling,
 	job job.Job,
 	dynconfig config.DynconfigInterface,
 ) schedulerv2.SchedulerServer {
-	return &schedulerServerV2{service.NewV2(cfg, resource, persistentCacheResource, scheduling, job, internaljob.NewImage(), dynconfig)}
+	return &schedulerServerV2{service.NewV2(cfg, resource, cacheResource, persistentCacheResource, scheduling, job, internaljob.NewImage(), dynconfig)}
 }
 
 // AnnouncePeer announces peer to scheduler.
@@ -165,36 +167,6 @@ func (s *schedulerServerV2) DeleteHost(ctx context.Context, req *schedulerv2.Del
 	return new(emptypb.Empty), nil
 }
 
-// TODO(fu220): Implement the following methods.
-// AnnounceCachePeer announces cache peer to scheduler.
-func (s *schedulerServerV2) AnnounceCachePeer(stream schedulerv2.Scheduler_AnnounceCachePeerServer) error {
-	return nil
-}
-
-// TODO(fu220): Implement the following methods.
-// Checks information of cache peer.
-func (s *schedulerServerV2) StatCachePeer(ctx context.Context, req *schedulerv2.StatCachePeerRequest) (*commonv2.CachePeer, error) {
-	return nil, nil
-}
-
-// TODO(fu220): Implement the following methods.
-// DeleteCachePeer releases cache peer in scheduler.
-func (s *schedulerServerV2) DeleteCachePeer(ctx context.Context, req *schedulerv2.DeleteCachePeerRequest) (*emptypb.Empty, error) {
-	return new(emptypb.Empty), nil
-}
-
-// TODO(fu220): Implement the following methods.
-// Checks information of cache task.
-func (s *schedulerServerV2) StatCacheTask(ctx context.Context, req *schedulerv2.StatCacheTaskRequest) (*commonv2.CacheTask, error) {
-	return nil, nil
-}
-
-// TODO(fu220): Implement the following methods.
-// DeleteCacheTask releases cache task in scheduler.
-func (s *schedulerServerV2) DeleteCacheTask(ctx context.Context, req *schedulerv2.DeleteCacheTaskRequest) (*emptypb.Empty, error) {
-	return new(emptypb.Empty), nil
-}
-
 // AnnouncePersistentCachePeer announces persistent cache peer to scheduler.
 func (s *schedulerServerV2) AnnouncePersistentCachePeer(stream schedulerv2.Scheduler_AnnouncePersistentCachePeerServer) error {
 	// Collect AnnouncePersistentCachePeerCount metrics.
@@ -296,6 +268,77 @@ func (s *schedulerServerV2) DeletePersistentCacheTask(ctx context.Context, req *
 	if err := s.service.DeletePersistentCacheTask(ctx, req); err != nil {
 		// Collect DeletePersistentCacheTaskFailureCount metrics.
 		metrics.DeletePersistentCacheTaskFailureCount.Inc()
+		return nil, err
+	}
+
+	return new(emptypb.Empty), nil
+}
+
+// AnnounceCachePeer announces cache peer to scheduler.
+func (s *schedulerServerV2) AnnounceCachePeer(stream schedulerv2.Scheduler_AnnounceCachePeerServer) error {
+	// Collect ConcurrentScheduleGauge metrics.
+	metrics.ConcurrentScheduleGauge.Inc()
+	defer metrics.ConcurrentScheduleGauge.Dec()
+
+	// Collect AnnounceCachePeerCount metrics.
+	metrics.AnnounceCachePeerCount.Inc()
+	if err := s.service.AnnounceCachePeer(stream); err != nil {
+		// Collect AnnounceCachePeerFailureCount metrics.
+		metrics.AnnounceCachePeerFailureCount.Inc()
+		return err
+	}
+
+	return nil
+}
+
+// StatCachePeer checks information of cache peer.
+func (s *schedulerServerV2) StatCachePeer(ctx context.Context, req *schedulerv2.StatCachePeerRequest) (*commonv2.CachePeer, error) {
+	// Collect StatCachePeerCount metrics.
+	metrics.StatCachePeerCount.Inc()
+	resp, err := s.service.StatCachePeer(ctx, req)
+	if err != nil {
+		// Collect StatCachePeerFailureCount metrics.
+		metrics.StatCachePeerFailureCount.Inc()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// DeleteCachePeer releases cache peer in scheduler.
+func (s *schedulerServerV2) DeleteCachePeer(ctx context.Context, req *schedulerv2.DeleteCachePeerRequest) (*emptypb.Empty, error) {
+	// Collect DeleteCachePeerCount metrics.
+	metrics.DeleteCachePeerCount.Inc()
+	if err := s.service.DeleteCachePeer(ctx, req); err != nil {
+		// Collect DeleteCachePeerFailureCount metrics.
+		metrics.DeleteCachePeerFailureCount.Inc()
+		return nil, err
+	}
+
+	return new(emptypb.Empty), nil
+}
+
+// StatCacheTask checks information of cache task.
+func (s *schedulerServerV2) StatCacheTask(ctx context.Context, req *schedulerv2.StatCacheTaskRequest) (*commonv2.CacheTask, error) {
+	// Collect StatCacheTaskCount metrics.
+	metrics.StatCacheTaskCount.Inc()
+	resp, err := s.service.StatCacheTask(ctx, req)
+	if err != nil {
+		// Collect StatCacheTaskFailureCount metrics.
+		metrics.StatCacheTaskFailureCount.Inc()
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// DeleteCacheTask releases cache task in scheduler.
+func (s *schedulerServerV2) DeleteCacheTask(ctx context.Context, req *schedulerv2.DeleteCacheTaskRequest) (*emptypb.Empty, error) {
+	// Collect DeleteCacheTaskCount metrics.
+	metrics.DeleteCacheTaskCount.Inc()
+	if err := s.service.DeleteCacheTask(ctx, req); err != nil {
+		// Collect DeleteCacheTaskFailureCount metrics.
+		metrics.DeleteCacheTaskFailureCount.Inc()
 		return nil, err
 	}
 

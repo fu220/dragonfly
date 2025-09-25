@@ -19,6 +19,7 @@ package main
 import (
 	"d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	"d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 )
 
 type evaluator struct{}
@@ -45,4 +46,14 @@ func (e *evaluator) IsBadPersistentCacheParent(peer *persistentcache.Peer) bool 
 
 func DragonflyPluginInit(option map[string]string) (any, map[string]string, error) {
 	return &evaluator{}, map[string]string{"type": "scheduler", "name": "evaluator"}, nil
+}
+
+// EvaluateCacheParents sort cache parents by evaluating multiple feature scores.
+func (e *evaluator) EvaluateCacheParents(parents []*standardcache.Peer, child *standardcache.Peer, taskPieceCount uint32) []*standardcache.Peer {
+	return []*standardcache.Peer{&standardcache.Peer{}}
+}
+
+// IsBadCacheParent determine if peer is a bad cache parent, it can not be selected as a cache parent.
+func (e *evaluator) IsBadCacheParent(peer *standardcache.Peer) bool {
+	return true
 }

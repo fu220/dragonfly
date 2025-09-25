@@ -90,6 +90,11 @@ type Service interface {
 	GetPeer(context.Context, uint) (*models.Peer, error)
 	GetPeers(context.Context, types.GetPeersQuery) ([]models.Peer, int64, error)
 
+	CreateCachePeer(context.Context, types.CreatePeerRequest) (*models.CachePeer, error)
+	DestroyCachePeer(context.Context, uint) error
+	GetCachePeer(context.Context, uint) (*models.CachePeer, error)
+	GetCachePeers(context.Context, types.GetPeersQuery) ([]models.CachePeer, int64, error)
+
 	CreateSchedulerCluster(context.Context, types.CreateSchedulerClusterRequest) (*models.SchedulerCluster, error)
 	DestroySchedulerCluster(context.Context, uint) error
 	UpdateSchedulerCluster(context.Context, uint, types.UpdateSchedulerClusterRequest) (*models.SchedulerCluster, error)

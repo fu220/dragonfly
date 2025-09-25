@@ -54,6 +54,7 @@ import (
 	jobmocks "d7y.io/dragonfly/v2/scheduler/job/mocks"
 	"d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	"d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 	schedulingmocks "d7y.io/dragonfly/v2/scheduler/scheduling/mocks"
 )
 
@@ -234,6 +235,101 @@ var (
 	}
 
 	mockPersistentCacheInterval = durationpb.New(5 * time.Minute).AsDuration()
+
+	mockCacheRawHost = standardcache.Host{
+		ID:              mockHostID,
+		Type:            pkgtypes.HostTypeNormal,
+		Hostname:        "foo",
+		IP:              "127.0.0.1",
+		Port:            8003,
+		DownloadPort:    8001,
+		OS:              "darwin",
+		Platform:        "darwin",
+		PlatformFamily:  "Standalone Workstation",
+		PlatformVersion: "11.1",
+		KernelVersion:   "20.2.0",
+		CPU:             mockCacheCPU,
+		Memory:          mockCacheMemory,
+		Network:         mockCacheNetwork,
+		Disk:            mockCacheDisk,
+		Build:           mockCacheBuild,
+		CreatedAt:       atomic.NewTime(time.Now()),
+		UpdatedAt:       atomic.NewTime(time.Now()),
+	}
+
+	mockCacheRawSeedHost = standardcache.Host{
+		ID:              mockSeedHostID,
+		Type:            pkgtypes.HostTypeSuperSeed,
+		Hostname:        "bar",
+		IP:              "127.0.0.1",
+		Port:            8003,
+		DownloadPort:    8001,
+		OS:              "darwin",
+		Platform:        "darwin",
+		PlatformFamily:  "Standalone Workstation",
+		PlatformVersion: "11.1",
+		KernelVersion:   "20.2.0",
+		CPU:             mockCacheCPU,
+		Memory:          mockCacheMemory,
+		Network:         mockCacheNetwork,
+		Disk:            mockCacheDisk,
+		Build:           mockCacheBuild,
+		CreatedAt:       atomic.NewTime(time.Now()),
+		UpdatedAt:       atomic.NewTime(time.Now()),
+	}
+
+	mockCacheCPU = standardcache.CPU{
+		LogicalCount:   4,
+		PhysicalCount:  2,
+		Percent:        1,
+		ProcessPercent: 0.5,
+		Times: standardcache.CPUTimes{
+			User:      240662.2,
+			System:    317950.1,
+			Idle:      3393691.3,
+			Nice:      0,
+			Iowait:    0,
+			Irq:       0,
+			Softirq:   0,
+			Steal:     0,
+			Guest:     0,
+			GuestNice: 0,
+		},
+	}
+
+	mockCacheMemory = standardcache.Memory{
+		Total:              17179869184,
+		Available:          5962813440,
+		Used:               11217055744,
+		UsedPercent:        65.291858,
+		ProcessUsedPercent: 41.525125,
+		Free:               2749598908,
+	}
+
+	mockCacheNetwork = standardcache.Network{
+		TCPConnectionCount:       10,
+		UploadTCPConnectionCount: 1,
+		Location:                 mockHostLocation,
+		IDC:                      mockHostIDC,
+	}
+
+	mockCacheDisk = standardcache.Disk{
+		Total:             499963174912,
+		Free:              37226479616,
+		Used:              423809622016,
+		UsedPercent:       91.92547406065952,
+		InodesTotal:       4882452880,
+		InodesUsed:        7835772,
+		InodesFree:        4874617108,
+		InodesUsedPercent: 0.1604884305611568,
+	}
+
+	mockCacheBuild = standardcache.Build{
+		GitVersion: "v1.0.0",
+		GitCommit:  "221176b117c6d59366d68f2b34d38be50c935883",
+		GoVersion:  "1.18",
+		Platform:   "darwin",
+	}
 )
 
 func TestService_NewV2(t *testing.T) {
@@ -256,12 +352,13 @@ func TestService_NewV2(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
 			internalJobImage := internaljobmocks.NewMockImage(ctl)
 
-			tc.expect(t, NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig))
+			tc.expect(t, NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig))
 		})
 	}
 }
@@ -429,6 +526,7 @@ func TestServiceV2_StatPeer(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
@@ -440,7 +538,7 @@ func TestServiceV2_StatPeer(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockSeedPeerID, mockTask, mockHost, standard.WithRange(mockPeerRange))
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.mock(peer, peerManager, resource.EXPECT(), peerManager.EXPECT())
 			resp, err := svc.StatPeer(context.Background(), &schedulerv2.StatPeerRequest{TaskId: mockTaskID, PeerId: mockPeerID})
@@ -503,6 +601,7 @@ func TestServiceV2_DeletePeer(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -514,7 +613,7 @@ func TestServiceV2_DeletePeer(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockSeedPeerID, mockTask, mockHost, standard.WithRange(mockPeerRange))
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.mock(peer, peerManager, resource.EXPECT(), peerManager.EXPECT())
 			tc.expect(t, svc.DeletePeer(context.Background(), &schedulerv2.DeletePeerRequest{TaskId: mockTaskID, PeerId: mockPeerID}))
@@ -593,6 +692,7 @@ func TestServiceV2_StatTask(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
@@ -600,7 +700,7 @@ func TestServiceV2_StatTask(t *testing.T) {
 
 			taskManager := standard.NewMockTaskManager(ctl)
 			task := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.mock(task, taskManager, resource.EXPECT(), taskManager.EXPECT())
 			resp, err := svc.StatTask(context.Background(), &schedulerv2.StatTaskRequest{TaskId: mockTaskID})
@@ -613,10 +713,10 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 	tests := []struct {
 		name string
 		req  *schedulerv2.AnnounceHostRequest
-		run  func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder)
+		run  func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, cacheHost *standardcache.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder)
 	}{
 		{
-			name: "host not found and persistent cache host not found",
+			name: "host not found and cache host not found and persistent cache host not found",
 			req: &schedulerv2.AnnounceHostRequest{
 				Host: &commonv2.Host{
 					Id:              mockHostID,
@@ -686,13 +786,45 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 				},
 				Interval: durationpb.New(5 * time.Minute),
 			},
-			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, cacheHost *standardcache.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
 				gomock.InOrder(
 					md.GetSchedulerClusterClientConfig().Return(managertypes.SchedulerClusterClientConfig{LoadLimit: 10}, nil).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Load(gomock.Any()).Return(nil, false).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Store(gomock.Any()).Do(func(host *standard.Host) {
+						assert := assert.New(t)
+						assert.Equal(host.ID, req.Host.Id)
+						assert.Equal(host.Type, pkgtypes.HostType(req.Host.Type))
+						assert.Equal(host.Hostname, req.Host.Hostname)
+						assert.Equal(host.IP, req.Host.Ip)
+						assert.Equal(host.Port, req.Host.Port)
+						assert.Equal(host.DownloadPort, req.Host.DownloadPort)
+						assert.Equal(host.DisableShared, req.Host.DisableShared)
+						assert.Equal(host.OS, req.Host.Os)
+						assert.Equal(host.Platform, req.Host.Platform)
+						assert.Equal(host.PlatformVersion, req.Host.PlatformVersion)
+						assert.Equal(host.KernelVersion, req.Host.KernelVersion)
+						assert.EqualValues(host.CPU, mockCPU)
+						assert.EqualValues(host.Memory, mockMemory)
+						assert.EqualValues(host.Network, mockNetwork)
+						assert.EqualValues(host.Disk, mockDisk)
+						assert.EqualValues(host.Build, mockBuild)
+						assert.EqualValues(host.AnnounceInterval, mockInterval)
+						assert.Equal(host.ConcurrentUploadLimit.Load(), int32(10))
+						assert.Equal(host.ConcurrentUploadCount.Load(), int32(0))
+						assert.Equal(host.UploadCount.Load(), int64(0))
+						assert.Equal(host.UploadFailedCount.Load(), int64(0))
+						assert.NotNil(host.Peers)
+						assert.Equal(host.PeerCount.Load(), int32(0))
+						assert.NotEqual(host.CreatedAt.Load().Nanosecond(), 0)
+						assert.NotEqual(host.UpdatedAt.Load().Nanosecond(), 0)
+						assert.NotNil(host.Log)
+					}).Return().Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Load(gomock.Any()).Return(nil, false).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Store(gomock.Any()).Do(func(host *standardcache.Host) {
 						assert := assert.New(t)
 						assert.Equal(host.ID, req.Host.Id)
 						assert.Equal(host.Type, pkgtypes.HostType(req.Host.Type))
@@ -754,7 +886,7 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 			},
 		},
 		{
-			name: "host not found and persistent cache host not found, dynconfig returns error",
+			name: "host not found, cache host not found and persistent cache host not found, dynconfig returns error",
 			req: &schedulerv2.AnnounceHostRequest{
 				Host: &commonv2.Host{
 					Id:              mockHostID,
@@ -824,7 +956,7 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 				},
 				Interval: durationpb.New(5 * time.Minute),
 			},
-			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, cacheHost *standardcache.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
 				gomock.InOrder(
 					md.GetSchedulerClusterClientConfig().Return(managertypes.SchedulerClusterClientConfig{}, errors.New("foo")).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
@@ -861,6 +993,38 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 					}).Return().Times(1),
 					mpr.HostManager().Return(persistentCacheHostManager).Times(1),
 					mph.Load(gomock.Any(), gomock.Any()).Return(nil, false).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Load(gomock.Any()).Return(nil, false).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Store(gomock.Any()).Do(func(host *standardcache.Host) {
+						assert := assert.New(t)
+						assert.Equal(host.ID, req.Host.Id)
+						assert.Equal(host.Type, pkgtypes.HostType(req.Host.Type))
+						assert.Equal(host.Hostname, req.Host.Hostname)
+						assert.Equal(host.IP, req.Host.Ip)
+						assert.Equal(host.Port, req.Host.Port)
+						assert.Equal(host.DownloadPort, req.Host.DownloadPort)
+						assert.Equal(host.DisableShared, req.Host.DisableShared)
+						assert.Equal(host.OS, req.Host.Os)
+						assert.Equal(host.Platform, req.Host.Platform)
+						assert.Equal(host.PlatformVersion, req.Host.PlatformVersion)
+						assert.Equal(host.KernelVersion, req.Host.KernelVersion)
+						assert.EqualValues(host.CPU, mockCPU)
+						assert.EqualValues(host.Memory, mockMemory)
+						assert.EqualValues(host.Network, mockNetwork)
+						assert.EqualValues(host.Disk, mockDisk)
+						assert.EqualValues(host.Build, mockBuild)
+						assert.EqualValues(host.AnnounceInterval, mockInterval)
+						assert.Equal(host.ConcurrentUploadLimit.Load(), int32(200))
+						assert.Equal(host.ConcurrentUploadCount.Load(), int32(0))
+						assert.Equal(host.UploadCount.Load(), int64(0))
+						assert.Equal(host.UploadFailedCount.Load(), int64(0))
+						assert.NotNil(host.Peers)
+						assert.Equal(host.PeerCount.Load(), int32(0))
+						assert.NotEqual(host.CreatedAt.Load().Nanosecond(), 0)
+						assert.NotEqual(host.UpdatedAt.Load().Nanosecond(), 0)
+						assert.NotNil(host.Log)
+					}).Return().Times(1),
 					mpr.HostManager().Return(persistentCacheHostManager).Times(1),
 					mph.Store(gomock.Any(), gomock.Any()).Do(func(ctx context.Context, host *persistentcache.Host) {
 						assert := assert.New(t)
@@ -892,7 +1056,7 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 			},
 		},
 		{
-			name: "host already exists and persistent cache host already exists",
+			name: "host already exists, cache host already exists and persistent cache host already exists",
 			req: &schedulerv2.AnnounceHostRequest{
 				Host: &commonv2.Host{
 					Id:              mockHostID,
@@ -962,11 +1126,13 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 				},
 				Interval: durationpb.New(5 * time.Minute),
 			},
-			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, cacheHost *standardcache.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
 				gomock.InOrder(
 					md.GetSchedulerClusterClientConfig().Return(managertypes.SchedulerClusterClientConfig{LoadLimit: 10}, nil).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Load(gomock.Any()).Return(host, true).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Load(gomock.Any()).Return(cacheHost, true).Times(1),
 					mpr.HostManager().Return(persistentCacheHostManager).Times(1),
 					mph.Load(gomock.Any(), gomock.Any()).Return(persistentCacheHost, true).Times(1),
 					mpr.HostManager().Return(persistentCacheHostManager).Times(1),
@@ -1026,7 +1192,7 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 			},
 		},
 		{
-			name: "host already exists and persistent cache host already exists, dynconfig returns error",
+			name: "host already exists, cache host already exists and persistent cache host already exists, dynconfig returns error",
 			req: &schedulerv2.AnnounceHostRequest{
 				Host: &commonv2.Host{
 					Id:              mockHostID,
@@ -1096,11 +1262,13 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 				},
 				Interval: durationpb.New(5 * time.Minute),
 			},
-			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, cacheHost *standardcache.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
 				gomock.InOrder(
 					md.GetSchedulerClusterClientConfig().Return(managertypes.SchedulerClusterClientConfig{}, errors.New("foo")).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Load(gomock.Any()).Return(host, true).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Load(gomock.Any()).Return(cacheHost, true).Times(1),
 					mpr.HostManager().Return(persistentCacheHostManager).Times(1),
 					mph.Load(gomock.Any(), gomock.Any()).Return(persistentCacheHost, true).Times(1),
 					mpr.HostManager().Return(persistentCacheHostManager).Times(1),
@@ -1160,7 +1328,7 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 			},
 		},
 		{
-			name: "host not found and persistent cache host not found, store persistent cache host failed",
+			name: "host not found, cache host not found and persistent cache host not found, store persistent cache host failed",
 			req: &schedulerv2.AnnounceHostRequest{
 				Host: &commonv2.Host{
 					Id:              mockHostID,
@@ -1230,13 +1398,45 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 				},
 				Interval: durationpb.New(5 * time.Minute),
 			},
-			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, cacheHost *standardcache.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
 				gomock.InOrder(
 					md.GetSchedulerClusterClientConfig().Return(managertypes.SchedulerClusterClientConfig{LoadLimit: 10}, nil).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Load(gomock.Any()).Return(nil, false).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Store(gomock.Any()).Do(func(host *standard.Host) {
+						assert := assert.New(t)
+						assert.Equal(host.ID, req.Host.Id)
+						assert.Equal(host.Type, pkgtypes.HostType(req.Host.Type))
+						assert.Equal(host.Hostname, req.Host.Hostname)
+						assert.Equal(host.IP, req.Host.Ip)
+						assert.Equal(host.Port, req.Host.Port)
+						assert.Equal(host.DownloadPort, req.Host.DownloadPort)
+						assert.Equal(host.DisableShared, req.Host.DisableShared)
+						assert.Equal(host.OS, req.Host.Os)
+						assert.Equal(host.Platform, req.Host.Platform)
+						assert.Equal(host.PlatformVersion, req.Host.PlatformVersion)
+						assert.Equal(host.KernelVersion, req.Host.KernelVersion)
+						assert.EqualValues(host.CPU, mockCPU)
+						assert.EqualValues(host.Memory, mockMemory)
+						assert.EqualValues(host.Network, mockNetwork)
+						assert.EqualValues(host.Disk, mockDisk)
+						assert.EqualValues(host.Build, mockBuild)
+						assert.EqualValues(host.AnnounceInterval, mockInterval)
+						assert.Equal(host.ConcurrentUploadLimit.Load(), int32(10))
+						assert.Equal(host.ConcurrentUploadCount.Load(), int32(0))
+						assert.Equal(host.UploadCount.Load(), int64(0))
+						assert.Equal(host.UploadFailedCount.Load(), int64(0))
+						assert.NotNil(host.Peers)
+						assert.Equal(host.PeerCount.Load(), int32(0))
+						assert.NotEqual(host.CreatedAt.Load().Nanosecond(), 0)
+						assert.NotEqual(host.UpdatedAt.Load().Nanosecond(), 0)
+						assert.NotNil(host.Log)
+					}).Return().Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Load(gomock.Any()).Return(nil, false).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Store(gomock.Any()).Do(func(host *standardcache.Host) {
 						assert := assert.New(t)
 						assert.Equal(host.ID, req.Host.Id)
 						assert.Equal(host.Type, pkgtypes.HostType(req.Host.Type))
@@ -1298,7 +1498,7 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 			},
 		},
 		{
-			name: "host already exists and persistent cache host already exists, store persistent cache host failed",
+			name: "host already exists, cache host already exists and persistent cache host already exists, store persistent cache host failed",
 			req: &schedulerv2.AnnounceHostRequest{
 				Host: &commonv2.Host{
 					Id:              mockHostID,
@@ -1369,11 +1569,13 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 				},
 				Interval: durationpb.New(5 * time.Minute),
 			},
-			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+			run: func(t *testing.T, svc *V2, req *schedulerv2.AnnounceHostRequest, host *standard.Host, cacheHost *standardcache.Host, persistentCacheHost *persistentcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, persistentCacheHostManager persistentcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mpr *persistentcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder, mph *persistentcache.MockHostManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
 				gomock.InOrder(
 					md.GetSchedulerClusterClientConfig().Return(managertypes.SchedulerClusterClientConfig{}, errors.New("foo")).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Load(gomock.Any()).Return(host, true).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Load(gomock.Any()).Return(cacheHost, true).Times(1),
 					mpr.HostManager().Return(persistentCacheHostManager).Times(1),
 					mph.Load(gomock.Any(), gomock.Any()).Return(persistentCacheHost, true).Times(1),
 					mpr.HostManager().Return(persistentCacheHostManager).Times(1),
@@ -1415,16 +1617,21 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
 			internalJobImage := internaljobmocks.NewMockImage(ctl)
 
 			hostManager := standard.NewMockHostManager(ctl)
+			cacheHostManager := standardcache.NewMockHostManager(ctl)
 			persistentcacheHostManager := persistentcache.NewMockHostManager(ctl)
 			host := standard.NewHost(
 				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			cacheHost := standardcache.NewHost(
+				mockCacheRawHost.ID, mockCacheRawHost.IP, mockCacheRawHost.Hostname,
+				mockCacheRawHost.Port, mockCacheRawHost.DownloadPort, mockCacheRawHost.ProxyPort, mockCacheRawHost.Type)
 			persistentCacheHost := persistentcache.NewHost(
 				mockRawPersistentCacheHost.ID, mockRawPersistentCacheHost.Hostname, mockRawPersistentCacheHost.IP,
 				mockRawPersistentCacheHost.OS, mockRawPersistentCacheHost.Platform, mockRawPersistentCacheHost.PlatformFamily, mockRawPersistentCacheHost.PlatformVersion, mockRawPersistentCacheHost.KernelVersion,
@@ -1432,9 +1639,9 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 				mockRawPersistentCacheHost.CPU, mockRawPersistentCacheHost.Memory, mockRawPersistentCacheHost.Network, mockRawPersistentCacheHost.Disk,
 				mockRawPersistentCacheHost.Build, mockRawPersistentCacheHost.AnnounceInterval, mockRawPersistentCacheHost.CreatedAt, mockRawPersistentCacheHost.UpdatedAt, mockRawHost.Log)
 
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
-			tc.run(t, svc, tc.req, host, persistentCacheHost, hostManager, persistentcacheHostManager, resource.EXPECT(), persistentCacheResource.EXPECT(), hostManager.EXPECT(), persistentcacheHostManager.EXPECT(), dynconfig.EXPECT())
+			tc.run(t, svc, tc.req, host, cacheHost, persistentCacheHost, hostManager, cacheHostManager, persistentcacheHostManager, resource.EXPECT(), cacheResource.EXPECT(), persistentCacheResource.EXPECT(), hostManager.EXPECT(), cacheHostManager.EXPECT(), persistentcacheHostManager.EXPECT(), dynconfig.EXPECT())
 		})
 	}
 }
@@ -1442,14 +1649,15 @@ func TestServiceV2_AnnounceHost(t *testing.T) {
 func TestServiceV2_ListHosts(t *testing.T) {
 	tests := []struct {
 		name   string
-		mock   func(host *standard.Host, hostManager standard.HostManager, mr *standard.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder)
+		mock   func(host *standard.Host, cacheHost *standardcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder)
 		expect func(t *testing.T, host *standard.Host, resp []*commonv2.Host, err error)
 	}{
 		{
 			name: "host manager is empty",
-			mock: func(host *standard.Host, hostManager standard.HostManager, mr *standard.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder) {
+			mock: func(host *standard.Host, cacheHost *standardcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder) {
 				gomock.InOrder(
 					mr.HostManager().Return(hostManager).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
 					mh.Range(gomock.Any()).Do(func(f func(key, value any) bool) {
 						f(nil, nil)
 					}).Return().Times(1),
@@ -1463,9 +1671,10 @@ func TestServiceV2_ListHosts(t *testing.T) {
 		},
 		{
 			name: "host manager is not empty",
-			mock: func(host *standard.Host, hostManager standard.HostManager, mr *standard.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder) {
+			mock: func(host *standard.Host, cacheHost *standardcache.Host, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder) {
 				gomock.InOrder(
 					mr.HostManager().Return(hostManager).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
 					mh.Range(gomock.Any()).Do(func(f func(key, value any) bool) {
 						f(nil, host)
 					}).Return().Times(1),
@@ -1546,18 +1755,24 @@ func TestServiceV2_ListHosts(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
 			internalJobImage := internaljobmocks.NewMockImage(ctl)
 
 			hostManager := standard.NewMockHostManager(ctl)
+			cacheHostManager := standardcache.NewMockHostManager(ctl)
 			host := standard.NewHost(
 				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname, mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type,
 				standard.WithCPU(mockCPU), standard.WithMemory(mockMemory), standard.WithNetwork(mockNetwork), standard.WithDisk(mockDisk), standard.WithBuild(mockBuild))
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			cacheHost := standardcache.NewHost(
+				mockCacheRawHost.ID, mockCacheRawHost.IP, mockCacheRawHost.Hostname,
+				mockCacheRawHost.Port, mockCacheRawHost.DownloadPort, mockCacheRawHost.ProxyPort, mockCacheRawHost.Type,
+				standardcache.WithCPU(mockCacheCPU), standardcache.WithMemory(mockCacheMemory), standardcache.WithNetwork(mockCacheNetwork), standardcache.WithDisk(mockCacheDisk), standardcache.WithBuild(mockCacheBuild))
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
-			tc.mock(host, hostManager, resource.EXPECT(), hostManager.EXPECT())
+			tc.mock(host, cacheHost, hostManager, cacheHostManager, resource.EXPECT(), cacheResource.EXPECT(), hostManager.EXPECT(), cacheHostManager.EXPECT())
 			resp, err := svc.ListHosts(context.Background())
 			tc.expect(t, host, resp.Hosts, err)
 		})
@@ -1567,14 +1782,15 @@ func TestServiceV2_ListHosts(t *testing.T) {
 func TestServiceV2_DeleteHost(t *testing.T) {
 	tests := []struct {
 		name   string
-		mock   func(host *standard.Host, mockPeer *standard.Peer, hostManager standard.HostManager, mr *standard.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder)
+		mock   func(host *standard.Host, cacheHost *standardcache.Host, mockPeer *standard.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder)
 		expect func(t *testing.T, peer *standard.Peer, err error)
 	}{
 		{
 			name: "host not found",
-			mock: func(host *standard.Host, mockPeer *standard.Peer, hostManager standard.HostManager, mr *standard.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder) {
+			mock: func(host *standard.Host, cacheHost *standardcache.Host, mockPeer *standard.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder) {
 				gomock.InOrder(
 					mr.HostManager().Return(hostManager).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
 					mh.Load(gomock.Any()).Return(nil, false).Times(1),
 				)
 			},
@@ -1585,9 +1801,10 @@ func TestServiceV2_DeleteHost(t *testing.T) {
 		},
 		{
 			name: "host has not peers",
-			mock: func(host *standard.Host, mockPeer *standard.Peer, hostManager standard.HostManager, mr *standard.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder) {
+			mock: func(host *standard.Host, cacheHost *standardcache.Host, mockPeer *standard.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder) {
 				gomock.InOrder(
 					mr.HostManager().Return(hostManager).Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
 					mh.Load(gomock.Any()).Return(host, true).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Delete(gomock.Any()).Return().Times(1),
@@ -1600,12 +1817,20 @@ func TestServiceV2_DeleteHost(t *testing.T) {
 		},
 		{
 			name: "peer leaves succeeded",
-			mock: func(host *standard.Host, mockPeer *standard.Peer, hostManager standard.HostManager, mr *standard.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder) {
+			mock: func(host *standard.Host, cacheHost *standardcache.Host, mockPeer *standard.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, mr *standard.MockResourceMockRecorder, mcr *standardcache.MockResourceMockRecorder, mh *standard.MockHostManagerMockRecorder, mch *standardcache.MockHostManagerMockRecorder) {
 				host.Peers.Store(mockPeer.ID, mockPeer)
 				mockPeer.FSM.SetState(standard.PeerStatePending)
 				gomock.InOrder(
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Load(gomock.Any()).Return(host, true).Times(1),
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Delete(gomock.Any()).Return().Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Load(gomock.Any()).Return(cacheHost, true).Times(1),
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Delete(gomock.Any()).Return().Times(1),
+					mcr.HostManager().Return(cacheHostManager).Times(1),
+					mch.Load(gomock.Any()).Return(cacheHost, true).Times(1),
 					mr.HostManager().Return(hostManager).Times(1),
 					mh.Delete(gomock.Any()).Return().Times(1),
 				)
@@ -1624,19 +1849,24 @@ func TestServiceV2_DeleteHost(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
 			internalJobImage := internaljobmocks.NewMockImage(ctl)
 
 			hostManager := standard.NewMockHostManager(ctl)
+			cacheHostManager := standardcache.NewMockHostManager(ctl)
 			host := standard.NewHost(
 				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			cacheHost := standardcache.NewHost(
+				mockCacheRawHost.ID, mockCacheRawHost.IP, mockCacheRawHost.Hostname,
+				mockCacheRawHost.Port, mockCacheRawHost.DownloadPort, mockCacheRawHost.ProxyPort, mockCacheRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			mockPeer := standard.NewPeer(mockSeedPeerID, mockTask, host)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, nil, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, nil, scheduling, job, internalJobImage, dynconfig)
 
-			tc.mock(host, mockPeer, hostManager, resource.EXPECT(), hostManager.EXPECT())
+			tc.mock(host, cacheHost, mockPeer, hostManager, cacheHostManager, resource.EXPECT(), cacheResource.EXPECT(), hostManager.EXPECT(), cacheHostManager.EXPECT())
 			tc.expect(t, mockPeer, svc.DeleteHost(context.Background(), &schedulerv2.DeleteHostRequest{HostId: mockHostID}))
 		})
 	}
@@ -1923,6 +2153,7 @@ func TestServiceV2_handleRegisterPeerRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
@@ -1939,7 +2170,7 @@ func TestServiceV2_handleRegisterPeerRequest(t *testing.T) {
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
 			seedPeer := standard.NewPeer(mockSeedPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.req, peer, seedPeer, hostManager, taskManager, peerManager, stream, resource.EXPECT(), hostManager.EXPECT(), taskManager.EXPECT(), peerManager.EXPECT(), stream.EXPECT(), scheduling.EXPECT())
 		})
@@ -2022,6 +2253,7 @@ func TestServiceV2_handleDownloadPeerStartedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2033,7 +2265,7 @@ func TestServiceV2_handleDownloadPeerStartedRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, peer, peerManager, resource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
 		})
@@ -2116,6 +2348,7 @@ func TestServiceV2_handleDownloadPeerBackToSourceStartedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2127,7 +2360,7 @@ func TestServiceV2_handleDownloadPeerBackToSourceStartedRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, peer, peerManager, resource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
 		})
@@ -2189,6 +2422,7 @@ func TestServiceV2_handleRescheduleRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2200,7 +2434,7 @@ func TestServiceV2_handleRescheduleRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, peer, peerManager, resource.EXPECT(), peerManager.EXPECT(), scheduling.EXPECT())
 		})
@@ -2264,6 +2498,7 @@ func TestServiceV2_handleDownloadPeerFinishedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2275,7 +2510,7 @@ func TestServiceV2_handleDownloadPeerFinishedRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, peer, peerManager, resource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
 		})
@@ -2447,6 +2682,7 @@ func TestServiceV2_handleDownloadPeerBackToSourceFinishedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2476,7 +2712,7 @@ func TestServiceV2_handleDownloadPeerBackToSourceFinishedRequest(t *testing.T) {
 
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.req, peer, peerManager, resource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
 		})
@@ -2539,6 +2775,7 @@ func TestServiceV2_handleDownloadPeerFailedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2550,7 +2787,7 @@ func TestServiceV2_handleDownloadPeerFailedRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, peer, peerManager, resource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
 		})
@@ -2660,6 +2897,7 @@ func TestServiceV2_handleDownloadPeerBackToSourceFailedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2671,7 +2909,7 @@ func TestServiceV2_handleDownloadPeerBackToSourceFailedRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, peer, peerManager, resource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
 		})
@@ -2820,6 +3058,7 @@ func TestServiceV2_handleDownloadPieceFinishedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2831,7 +3070,7 @@ func TestServiceV2_handleDownloadPieceFinishedRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.req, peer, peerManager, resource.EXPECT(), peerManager.EXPECT())
 		})
@@ -2947,6 +3186,7 @@ func TestServiceV2_handleDownloadPieceBackToSourceFinishedRequest(t *testing.T) 
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -2958,7 +3198,7 @@ func TestServiceV2_handleDownloadPieceBackToSourceFinishedRequest(t *testing.T) 
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.req, peer, peerManager, resource.EXPECT(), peerManager.EXPECT())
 		})
@@ -3059,6 +3299,7 @@ func TestServiceV2_handleDownloadPieceFailedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -3070,7 +3311,7 @@ func TestServiceV2_handleDownloadPieceFailedRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.req, peer, peerManager, resource.EXPECT(), peerManager.EXPECT())
 		})
@@ -3126,6 +3367,7 @@ func TestServiceV2_handleDownloadPieceBackToSourceFailedRequest(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			peerManager := standard.NewMockPeerManager(ctl)
@@ -3137,7 +3379,7 @@ func TestServiceV2_handleDownloadPieceBackToSourceFailedRequest(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.req, peer, peerManager, resource.EXPECT(), peerManager.EXPECT())
 		})
@@ -3338,6 +3580,7 @@ func TestServiceV2_handleResource(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
@@ -3353,7 +3596,7 @@ func TestServiceV2_handleResource(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			mockPeer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.download, stream, mockHost, mockTask, mockPeer, hostManager, taskManager, peerManager, resource.EXPECT(), hostManager.EXPECT(), taskManager.EXPECT(), peerManager.EXPECT())
 		})
@@ -3620,6 +3863,7 @@ func TestServiceV2_downloadTaskBySeedPeer(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			seedPeerClient := standard.NewMockSeedPeer(ctl)
@@ -3631,7 +3875,7 @@ func TestServiceV2_downloadTaskBySeedPeer(t *testing.T) {
 				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
 			mockTask := standard.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_STANDARD, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standard.WithDigest(mockTaskDigest))
 			peer := standard.NewPeer(mockPeerID, mockTask, mockHost)
-			svc := NewV2(&tc.config, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&tc.config, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, peer, seedPeerClient, resource.EXPECT(), seedPeerClient.EXPECT())
 		})
@@ -3839,12 +4083,13 @@ func TestServiceV2_PreheatImage(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
 			internalJobImage := internaljobmocks.NewMockImage(ctl)
 
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.req, job.EXPECT(), internalJobImage.EXPECT())
 		})
@@ -4077,14 +4322,2248 @@ func TestServiceV2_StatImage(t *testing.T) {
 			defer ctl.Finish()
 			scheduling := schedulingmocks.NewMockScheduling(ctl)
 			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
 			persistentCacheResource := persistentcache.NewMockResource(ctl)
 			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
 			job := jobmocks.NewMockJob(ctl)
 			internalJobImage := internaljobmocks.NewMockImage(ctl)
 
-			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
 
 			tc.run(t, svc, tc.req, job.EXPECT(), internalJobImage.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_StatCachePeer(t *testing.T) {
+	tests := []struct {
+		name   string
+		mock   func(peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder)
+		expect func(t *testing.T, peer *standardcache.Peer, resp *commonv2.CachePeer, err error)
+	}{
+		{
+			name: "cache peer not found",
+			mock: func(peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Any()).Return(nil, false).Times(1),
+				)
+			},
+			expect: func(t *testing.T, peer *standardcache.Peer, resp *commonv2.CachePeer, err error) {
+				assert := assert.New(t)
+				assert.ErrorIs(err, status.Errorf(codes.NotFound, "cache peer %s not found", mockPeerID))
+			},
+		},
+		{
+			name: "cache peer has been loaded",
+			mock: func(peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				peer.StorePiece(&mockCachePiece)
+				peer.Task.StorePiece(&mockCachePiece)
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Any()).Return(peer, true).Times(1),
+				)
+			},
+			expect: func(t *testing.T, peer *standardcache.Peer, resp *commonv2.CachePeer, err error) {
+				dgst := peer.Task.Digest.String()
+
+				assert := assert.New(t)
+				assert.EqualValues(resp, &commonv2.CachePeer{
+					Id: peer.ID,
+					Range: &commonv2.Range{
+						Start:  uint64(peer.Range.Start),
+						Length: uint64(peer.Range.Length),
+					},
+					Priority: peer.Priority,
+					Pieces: []*commonv2.Piece{
+						{
+							Number:      uint32(mockPiece.Number),
+							ParentId:    &mockPiece.ParentID,
+							Offset:      mockPiece.Offset,
+							Length:      mockPiece.Length,
+							Digest:      mockPiece.Digest.String(),
+							TrafficType: &mockPiece.TrafficType,
+							Cost:        durationpb.New(mockPiece.Cost),
+							CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+						},
+					},
+					Cost:  durationpb.New(peer.Cost.Load()),
+					State: peer.FSM.Current(),
+					Task: &commonv2.CacheTask{
+						Id:                  peer.Task.ID,
+						Type:                peer.Task.Type,
+						Url:                 peer.Task.URL,
+						Digest:              &dgst,
+						Tag:                 &peer.Task.Tag,
+						Application:         &peer.Task.Application,
+						FilteredQueryParams: peer.Task.FilteredQueryParams,
+						RequestHeader:       peer.Task.Header,
+						ContentLength:       uint64(peer.Task.ContentLength.Load()),
+						PieceCount:          uint32(peer.Task.TotalPieceCount.Load()),
+						SizeScope:           peer.Task.SizeScope(),
+						Pieces: []*commonv2.Piece{
+							{
+								Number:      uint32(mockPiece.Number),
+								ParentId:    &mockPiece.ParentID,
+								Offset:      mockPiece.Offset,
+								Length:      mockPiece.Length,
+								Digest:      mockPiece.Digest.String(),
+								TrafficType: &mockPiece.TrafficType,
+								Cost:        durationpb.New(mockPiece.Cost),
+								CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+							},
+						},
+						State:     peer.Task.FSM.Current(),
+						PeerCount: uint32(peer.Task.PeerCount()),
+						CreatedAt: timestamppb.New(peer.Task.CreatedAt.Load()),
+						UpdatedAt: timestamppb.New(peer.Task.UpdatedAt.Load()),
+					},
+					Host: &commonv2.Host{
+						Id:              peer.Host.ID,
+						Type:            uint32(peer.Host.Type),
+						Hostname:        peer.Host.Hostname,
+						Ip:              peer.Host.IP,
+						Port:            peer.Host.Port,
+						DownloadPort:    peer.Host.DownloadPort,
+						Os:              peer.Host.OS,
+						Platform:        peer.Host.Platform,
+						PlatformFamily:  peer.Host.PlatformFamily,
+						PlatformVersion: peer.Host.PlatformVersion,
+						KernelVersion:   peer.Host.KernelVersion,
+						Cpu: &commonv2.CPU{
+							LogicalCount:   peer.Host.CPU.LogicalCount,
+							PhysicalCount:  peer.Host.CPU.PhysicalCount,
+							Percent:        peer.Host.CPU.Percent,
+							ProcessPercent: peer.Host.CPU.ProcessPercent,
+							Times: &commonv2.CPUTimes{
+								User:      peer.Host.CPU.Times.User,
+								System:    peer.Host.CPU.Times.System,
+								Idle:      peer.Host.CPU.Times.Idle,
+								Nice:      peer.Host.CPU.Times.Nice,
+								Iowait:    peer.Host.CPU.Times.Iowait,
+								Irq:       peer.Host.CPU.Times.Irq,
+								Softirq:   peer.Host.CPU.Times.Softirq,
+								Steal:     peer.Host.CPU.Times.Steal,
+								Guest:     peer.Host.CPU.Times.Guest,
+								GuestNice: peer.Host.CPU.Times.GuestNice,
+							},
+						},
+						Memory: &commonv2.Memory{
+							Total:              peer.Host.Memory.Total,
+							Available:          peer.Host.Memory.Available,
+							Used:               peer.Host.Memory.Used,
+							UsedPercent:        peer.Host.Memory.UsedPercent,
+							ProcessUsedPercent: peer.Host.Memory.ProcessUsedPercent,
+							Free:               peer.Host.Memory.Free,
+						},
+						Network: &commonv2.Network{
+							TcpConnectionCount:       peer.Host.Network.TCPConnectionCount,
+							UploadTcpConnectionCount: peer.Host.Network.UploadTCPConnectionCount,
+							Location:                 &peer.Host.Network.Location,
+							Idc:                      &peer.Host.Network.IDC,
+							RxBandwidth:              &peer.Host.Network.RxBandwidth,
+							MaxRxBandwidth:           peer.Host.Network.MaxRxBandwidth,
+							TxBandwidth:              &peer.Host.Network.TxBandwidth,
+							MaxTxBandwidth:           peer.Host.Network.MaxTxBandwidth,
+						},
+						Disk: &commonv2.Disk{
+							Total:             peer.Host.Disk.Total,
+							Free:              peer.Host.Disk.Free,
+							Used:              peer.Host.Disk.Used,
+							UsedPercent:       peer.Host.Disk.UsedPercent,
+							InodesTotal:       peer.Host.Disk.InodesTotal,
+							InodesUsed:        peer.Host.Disk.InodesUsed,
+							InodesFree:        peer.Host.Disk.InodesFree,
+							InodesUsedPercent: peer.Host.Disk.InodesUsedPercent,
+						},
+						Build: &commonv2.Build{
+							GitVersion: peer.Host.Build.GitVersion,
+							GitCommit:  &peer.Host.Build.GitCommit,
+							GoVersion:  &peer.Host.Build.GoVersion,
+							Platform:   &peer.Host.Build.Platform,
+						},
+					},
+					NeedBackToSource: peer.NeedBackToSource.Load(),
+					CreatedAt:        timestamppb.New(peer.CreatedAt.Load()),
+					UpdatedAt:        timestamppb.New(peer.UpdatedAt.Load()),
+				})
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockSeedPeerID, mockTask, mockHost, standardcache.WithRange(mockPeerRange))
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.mock(peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT())
+			resp, err := svc.StatCachePeer(context.Background(), &schedulerv2.StatCachePeerRequest{TaskId: mockTaskID, PeerId: mockPeerID})
+			tc.expect(t, peer, resp, err)
+		})
+	}
+}
+
+func TestServiceV2_DeleteCachePeer(t *testing.T) {
+	tests := []struct {
+		name   string
+		mock   func(peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder)
+		expect func(t *testing.T, err error)
+	}{
+		{
+			name: "cache peer not found",
+			mock: func(peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Any()).Return(nil, false).Times(1),
+				)
+			},
+			expect: func(t *testing.T, err error) {
+				assert := assert.New(t)
+				assert.ErrorIs(err, status.Errorf(codes.NotFound, "cache peer %s not found", mockPeerID))
+			},
+		},
+		{
+			name: "cache peer fsm event failed",
+			mock: func(peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				peer.FSM.SetState(standardcache.PeerStateLeave)
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Any()).Return(peer, true).Times(1),
+				)
+			},
+			expect: func(t *testing.T, err error) {
+				assert := assert.New(t)
+				assert.ErrorIs(err, status.Error(codes.FailedPrecondition, "cache peer fsm event failed: event Leave inappropriate in current state Leave"))
+			},
+		},
+		{
+			name: "cache peer leaves succeeded",
+			mock: func(peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Any()).Return(peer, true).Times(1),
+				)
+			},
+			expect: func(t *testing.T, err error) {
+				assert := assert.New(t)
+				assert.NoError(err)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockSeedPeerID, mockTask, mockHost, standardcache.WithRange(mockPeerRange))
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.mock(peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT())
+			tc.expect(t, svc.DeleteCachePeer(context.Background(), &schedulerv2.DeleteCachePeerRequest{TaskId: mockTaskID, PeerId: mockPeerID}))
+		})
+	}
+}
+
+func TestServiceV2_StatCacheTask(t *testing.T) {
+	tests := []struct {
+		name   string
+		mock   func(task *standardcache.Task, taskManager standardcache.TaskManager, mr *standardcache.MockResourceMockRecorder, mt *standardcache.MockTaskManagerMockRecorder)
+		expect func(t *testing.T, task *standardcache.Task, resp *commonv2.CacheTask, err error)
+	}{
+		{
+			name: "cache task not found",
+			mock: func(task *standardcache.Task, taskManager standardcache.TaskManager, mr *standardcache.MockResourceMockRecorder, mt *standardcache.MockTaskManagerMockRecorder) {
+				gomock.InOrder(
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Any()).Return(nil, false).Times(1),
+				)
+			},
+			expect: func(t *testing.T, task *standardcache.Task, resp *commonv2.CacheTask, err error) {
+				assert := assert.New(t)
+				assert.ErrorIs(err, status.Errorf(codes.NotFound, "cache task %s not found", mockTaskID))
+			},
+		},
+		{
+			name: "cache task has been loaded",
+			mock: func(task *standardcache.Task, taskManager standardcache.TaskManager, mr *standardcache.MockResourceMockRecorder, mt *standardcache.MockTaskManagerMockRecorder) {
+				task.StorePiece(&mockCachePiece)
+				gomock.InOrder(
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Any()).Return(task, true).Times(1),
+				)
+			},
+			expect: func(t *testing.T, task *standardcache.Task, resp *commonv2.CacheTask, err error) {
+				dgst := task.Digest.String()
+
+				assert := assert.New(t)
+				assert.EqualValues(resp, &commonv2.CacheTask{
+					Id:                  task.ID,
+					Type:                task.Type,
+					Url:                 task.URL,
+					Digest:              &dgst,
+					Tag:                 &task.Tag,
+					Application:         &task.Application,
+					FilteredQueryParams: task.FilteredQueryParams,
+					RequestHeader:       task.Header,
+					ContentLength:       uint64(task.ContentLength.Load()),
+					PieceCount:          uint32(task.TotalPieceCount.Load()),
+					SizeScope:           task.SizeScope(),
+					Pieces: []*commonv2.Piece{
+						{
+							Number:      uint32(mockPiece.Number),
+							ParentId:    &mockPiece.ParentID,
+							Offset:      mockPiece.Offset,
+							Length:      mockPiece.Length,
+							Digest:      mockPiece.Digest.String(),
+							TrafficType: &mockPiece.TrafficType,
+							Cost:        durationpb.New(mockPiece.Cost),
+							CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+						},
+					},
+					State:     task.FSM.Current(),
+					PeerCount: uint32(task.PeerCount()),
+					CreatedAt: timestamppb.New(task.CreatedAt.Load()),
+					UpdatedAt: timestamppb.New(task.UpdatedAt.Load()),
+				})
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			taskManager := standardcache.NewMockTaskManager(ctl)
+			task := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig, Metrics: config.MetricsConfig{EnableHost: true}}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.mock(task, taskManager, cacheResource.EXPECT(), taskManager.EXPECT())
+			resp, err := svc.StatCacheTask(context.Background(), &schedulerv2.StatCacheTaskRequest{TaskId: mockTaskID})
+			tc.expect(t, task, resp, err)
+		})
+	}
+}
+
+func TestServiceV2_handleRegisterCachePeerRequest(t *testing.T) {
+	dgst := mockTaskDigest.String()
+
+	tests := []struct {
+		name string
+		req  *schedulerv2.RegisterCachePeerRequest
+		run  func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+			peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+			mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder)
+	}{
+		{
+			name: "host not found",
+			req:  &schedulerv2.RegisterCachePeerRequest{},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+				peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(peer.Host.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleRegisterCachePeerRequest(context.Background(), stream, peer.Host.ID, peer.Task.ID, peer.ID, req),
+					status.Errorf(codes.NotFound, "host %s not found", peer.Host.ID))
+			},
+		},
+		{
+			name: "can not found available peer and download task failed",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Digest: &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+				peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(peer.Host.ID)).Return(peer.Host, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(peer.Task.ID)).Return(peer.Task, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL1
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleRegisterCachePeerRequest(context.Background(), stream, peer.Host.ID, peer.Task.ID, peer.ID, req),
+					status.Errorf(codes.FailedPrecondition, "%s peer is forbidden", commonv2.Priority_LEVEL1.String()))
+			},
+		},
+		{
+			name: "task state is TaskStateFailed and download task failed",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Digest: &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+				peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(peer.Host.ID)).Return(peer.Host, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(peer.Task.ID)).Return(peer.Task, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL1
+				peer.Task.FSM.SetState(standardcache.TaskStateFailed)
+				peer.Task.StorePeer(peer)
+				peer.Task.StorePeer(seedPeer)
+				seedPeer.FSM.SetState(standardcache.PeerStateRunning)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleRegisterCachePeerRequest(context.Background(), stream, peer.Host.ID, peer.Task.ID, peer.ID, req),
+					status.Errorf(codes.FailedPrecondition, "%s peer is forbidden", commonv2.Priority_LEVEL1.String()))
+			},
+		},
+		{
+			name: "size scope is SizeScope_EMPTY and load AnnouncePeerStream failed",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Digest: &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+				peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(peer.Host.ID)).Return(peer.Host, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(peer.Task.ID)).Return(peer.Task, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.Task.ContentLength.Store(0)
+				peer.Priority = commonv2.Priority_LEVEL6
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleRegisterCachePeerRequest(context.Background(), stream, peer.Host.ID, peer.Task.ID, peer.ID, req),
+					status.Error(codes.NotFound, "AnnounceCachePeerStream not found"))
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStatePending)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateRunning)
+			},
+		},
+		{
+			name: "size scope is SizeScope_EMPTY and event PeerEventRegisterEmpty failed",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Digest: &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+				peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(peer.Host.ID)).Return(peer.Host, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(peer.Task.ID)).Return(peer.Task, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.Task.ContentLength.Store(0)
+				peer.Priority = commonv2.Priority_LEVEL6
+				peer.StoreAnnouncePeerStream(stream)
+				peer.FSM.SetState(standardcache.PeerStateReceivedEmpty)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleRegisterCachePeerRequest(context.Background(), stream, peer.Host.ID, peer.Task.ID, peer.ID, req),
+					status.Errorf(codes.Internal, "event RegisterEmpty inappropriate in current state ReceivedEmpty"))
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateRunning)
+			},
+		},
+		{
+			name: "size scope is SizeScope_EMPTY and send EmptyTaskResponse failed",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Digest: &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+				peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(peer.Host.ID)).Return(peer.Host, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(peer.Task.ID)).Return(peer.Task, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					ma.Send(gomock.Eq(&schedulerv2.AnnounceCachePeerResponse{
+						Response: &schedulerv2.AnnounceCachePeerResponse_EmptyCacheTaskResponse{
+							EmptyCacheTaskResponse: &schedulerv2.EmptyCacheTaskResponse{},
+						},
+					})).Return(errors.New("foo")).Times(1),
+				)
+
+				peer.Task.ContentLength.Store(0)
+				peer.Priority = commonv2.Priority_LEVEL6
+				peer.StoreAnnouncePeerStream(stream)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleRegisterCachePeerRequest(context.Background(), stream, peer.Host.ID, peer.Task.ID, peer.ID, req),
+					status.Errorf(codes.Internal, "foo"))
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateReceivedEmpty)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateRunning)
+			},
+		},
+		{
+			name: "size scope is SizeScope_NORMAL",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Digest: &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+				peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(peer.Host.ID)).Return(peer.Host, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(peer.Task.ID)).Return(peer.Task, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					ms.ScheduleCandidateParents(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1),
+				)
+
+				peer.Task.ContentLength.Store(129)
+				peer.Task.TotalPieceCount.Store(2)
+				peer.Task.StorePeer(peer)
+				peer.Task.StorePeer(seedPeer)
+				peer.Priority = commonv2.Priority_LEVEL6
+				peer.StoreAnnouncePeerStream(stream)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleRegisterCachePeerRequest(context.Background(), stream, peer.Host.ID, peer.Task.ID, peer.ID, req))
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateReceivedNormal)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateRunning)
+			},
+		},
+		{
+			name: "size scope is SizeScope_UNKNOW",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Digest: &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, peer *standardcache.Peer, seedPeer *standardcache.Peer, hostManager standard.HostManager, cacheHostManager standardcache.HostManager, taskManager standard.TaskManager,
+				peerManager standardcache.PeerManager, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, ma *schedulerv2mocks.MockScheduler_AnnounceCachePeerServerMockRecorder, ms *schedulingmocks.MockSchedulingMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(peer.Host.ID)).Return(peer.Host, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(peer.Task.ID)).Return(peer.Task, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					ms.ScheduleCandidateParents(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL6
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleRegisterCachePeerRequest(context.Background(), stream, peer.Host.ID, peer.Task.ID, peer.ID, req))
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateReceivedNormal)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateRunning)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			hostManager := standard.NewMockHostManager(ctl)
+			cacheHostManager := standardcache.NewMockHostManager(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			taskManager := standard.NewMockTaskManager(ctl)
+			cacheTaskManager := standardcache.NewMockTaskManager(ctl)
+			stream := schedulerv2mocks.NewMockScheduler_AnnounceCachePeerServer(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			seedPeer := standardcache.NewPeer(mockSeedPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, tc.req, peer, seedPeer, hostManager, cacheHostManager, taskManager, peerManager, stream, cacheResource.EXPECT(), cacheHostManager.EXPECT(), cacheTaskManager.EXPECT(), peerManager.EXPECT(), stream.EXPECT(), scheduling.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePeerStartedRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder)
+	}{
+		{
+			name: "peer can not be loaded",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerStartedRequest(context.Background(), peer.ID), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+			},
+		},
+		{
+			name: "cache peer state is PeerStateRunning",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerStartedRequest(context.Background(), peer.ID))
+			},
+		},
+		{
+			name: "cache task state is TaskStateRunning",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateReceivedNormal)
+				peer.Task.FSM.SetState(standardcache.TaskStateRunning)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerStartedRequest(context.Background(), peer.ID))
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+			},
+		},
+		{
+			name: "cache task state is TaskStatePending",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateReceivedNormal)
+				peer.Task.FSM.SetState(standardcache.TaskStatePending)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerStartedRequest(context.Background(), peer.ID))
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePeerBackToSourceStartedRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder)
+	}{
+		{
+			name: "cache peer can not be loaded",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerBackToSourceStartedRequest(context.Background(), peer.ID), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+			},
+		},
+		{
+			name: "cache peer state is PeerStateRunning",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateBackToSource)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerBackToSourceStartedRequest(context.Background(), peer.ID), status.Error(codes.Internal, "event DownloadBackToSource inappropriate in current state BackToSource"))
+			},
+		},
+		{
+			name: "cache task state is TaskStateRunning",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateReceivedNormal)
+				peer.Task.FSM.SetState(standardcache.TaskStateRunning)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerBackToSourceStartedRequest(context.Background(), peer.ID))
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+			},
+		},
+		{
+			name: "cache task state is TaskStatePending",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateReceivedNormal)
+				peer.Task.FSM.SetState(standardcache.TaskStatePending)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerBackToSourceStartedRequest(context.Background(), peer.ID))
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePeerFinishedRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder)
+	}{
+		{
+			name: "cache peer can not be loaded",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerFinishedRequest(context.Background(), peer.ID), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+			},
+		},
+		{
+			name: "cache peer state is PeerStateSucceeded",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateSucceeded)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerFinishedRequest(context.Background(), peer.ID), status.Error(codes.Internal, "event DownloadSucceeded inappropriate in current state Succeeded"))
+				assert.NotEqual(peer.Cost.Load(), 0)
+			},
+		},
+		{
+			name: "cache peer state is PeerStateRunning",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerFinishedRequest(context.Background(), peer.ID))
+				assert.Equal(peer.FSM.Current(), standard.PeerStateSucceeded)
+				assert.NotEqual(peer.Cost.Load(), 0)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePeerBackToSourceFinishedRequest(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write([]byte{1}); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer s.Close()
+
+	tests := []struct {
+		name string
+		req  *schedulerv2.DownloadCachePeerBackToSourceFinishedRequest
+		run  func(t *testing.T, svc *V2, req *schedulerv2.DownloadCachePeerBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+			mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder)
+	}{
+		{
+			name: "cache peer can not be loaded",
+			req:  &schedulerv2.DownloadCachePeerBackToSourceFinishedRequest{},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadCachePeerBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerBackToSourceFinishedRequest(context.Background(), peer.ID, req), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+				assert.Equal(peer.Task.ContentLength.Load(), int64(-1))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(0))
+				assert.Equal(len(peer.Task.DirectPiece), 0)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStatePending)
+			},
+		},
+		{
+			name: "cache peer state is PeerStateSucceeded",
+			req:  &schedulerv2.DownloadCachePeerBackToSourceFinishedRequest{},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadCachePeerBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateSucceeded)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerBackToSourceFinishedRequest(context.Background(), peer.ID, req), status.Error(codes.Internal, "event DownloadSucceeded inappropriate in current state Succeeded"))
+				assert.NotEqual(peer.Cost.Load(), 0)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(-1))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(0))
+				assert.Equal(len(peer.Task.DirectPiece), 0)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStatePending)
+			},
+		},
+		{
+			name: "cache peer has range",
+			req:  &schedulerv2.DownloadCachePeerBackToSourceFinishedRequest{},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadCachePeerBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+				peer.Range = &nethttp.Range{}
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerBackToSourceFinishedRequest(context.Background(), peer.ID, req))
+				assert.NotEqual(peer.Cost.Load(), 0)
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateSucceeded)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(-1))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(0))
+				assert.Equal(len(peer.Task.DirectPiece), 0)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStatePending)
+			},
+		},
+		{
+			name: "cache task state is TaskStateSucceeded",
+			req:  &schedulerv2.DownloadCachePeerBackToSourceFinishedRequest{},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadCachePeerBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+				peer.Task.FSM.SetState(standardcache.TaskStateSucceeded)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerBackToSourceFinishedRequest(context.Background(), peer.ID, req))
+				assert.NotEqual(peer.Cost.Load(), 0)
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateSucceeded)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(-1))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(0))
+				assert.Equal(len(peer.Task.DirectPiece), 0)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateSucceeded)
+			},
+		},
+		{
+			name: "cache task state is TaskStatePending",
+			req: &schedulerv2.DownloadCachePeerBackToSourceFinishedRequest{
+				ContentLength: 1024,
+				PieceCount:    10,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadCachePeerBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+				peer.Task.FSM.SetState(standardcache.TaskStatePending)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerBackToSourceFinishedRequest(context.Background(), peer.ID, req), status.Error(codes.Internal, "event DownloadSucceeded inappropriate in current state Pending"))
+				assert.NotEqual(peer.Cost.Load(), 0)
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateSucceeded)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(1024))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(10))
+				assert.Equal(len(peer.Task.DirectPiece), 0)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStatePending)
+			},
+		},
+		{
+			name: "cache task state is TaskStateRunning",
+			req: &schedulerv2.DownloadCachePeerBackToSourceFinishedRequest{
+				ContentLength: 1024,
+				PieceCount:    10,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadCachePeerBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+				peer.Task.FSM.SetState(standardcache.TaskStateRunning)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerBackToSourceFinishedRequest(context.Background(), peer.ID, req))
+				assert.NotEqual(peer.Cost.Load(), 0)
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateSucceeded)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(1024))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(10))
+				assert.Equal(len(peer.Task.DirectPiece), 0)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateSucceeded)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			url, err := url.Parse(s.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ip, rawPort, err := net.SplitHostPort(url.Host)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			port, err := strconv.ParseInt(rawPort, 10, 32)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockHost.IP = ip
+			mockHost.DownloadPort = int32(port)
+
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, tc.req, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePeerFailedRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder)
+	}{
+		{
+			name: "cache peer can not be loaded",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerFailedRequest(context.Background(), peer.ID), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+			},
+		},
+		{
+			name: "cache peer state is PeerEventDownloadFailed",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerEventDownloadFailed)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerFailedRequest(context.Background(), peer.ID), status.Error(codes.Internal, "event DownloadFailed inappropriate in current state DownloadFailed"))
+			},
+		},
+		{
+			name: "cache peer state is PeerStateRunning",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerFailedRequest(context.Background(), peer.ID))
+				assert.Equal(peer.FSM.Current(), standard.PeerStateFailed)
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePeerBackToSourceFailedRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder)
+	}{
+		{
+			name: "cache peer can not be loaded",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				peer.Task.ContentLength.Store(1)
+				peer.Task.TotalPieceCount.Store(1)
+				peer.Task.DirectPiece = []byte{1}
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerBackToSourceFailedRequest(context.Background(), peer.ID), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStatePending)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStatePending)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(1))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(1))
+				assert.Equal(peer.Task.DirectPiece, []byte{1})
+			},
+		},
+		{
+			name: "cache peer state is PeerStateFailed",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateFailed)
+				peer.Task.ContentLength.Store(1)
+				peer.Task.TotalPieceCount.Store(1)
+				peer.Task.DirectPiece = []byte{1}
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerBackToSourceFailedRequest(context.Background(), peer.ID), status.Error(codes.Internal, "event DownloadFailed inappropriate in current state Failed"))
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateFailed)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStatePending)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(1))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(1))
+				assert.Equal(peer.Task.DirectPiece, []byte{1})
+			},
+		},
+		{
+			name: "cache task state is TaskStateFailed",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+				peer.Task.FSM.SetState(standardcache.TaskStateFailed)
+				peer.Task.ContentLength.Store(1)
+				peer.Task.TotalPieceCount.Store(1)
+				peer.Task.DirectPiece = []byte{1}
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePeerBackToSourceFailedRequest(context.Background(), peer.ID), status.Error(codes.Internal, "event DownloadFailed inappropriate in current state Failed"))
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateFailed)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateFailed)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(-1))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(0))
+				assert.Equal(peer.Task.DirectPiece, []byte{})
+			},
+		},
+		{
+			name: "cache task state is TaskStateRunning",
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder, md *configmocks.MockDynconfigInterfaceMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					md.GetApplications().Return([]*managerv2.Application{}, nil).Times(1),
+				)
+
+				peer.FSM.SetState(standardcache.PeerStateRunning)
+				peer.Task.FSM.SetState(standardcache.TaskStateRunning)
+				peer.Task.ContentLength.Store(1)
+				peer.Task.TotalPieceCount.Store(1)
+				peer.Task.DirectPiece = []byte{1}
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePeerBackToSourceFailedRequest(context.Background(), peer.ID))
+				assert.Equal(peer.FSM.Current(), standardcache.PeerStateFailed)
+				assert.Equal(peer.Task.FSM.Current(), standardcache.TaskStateFailed)
+				assert.Equal(peer.Task.ContentLength.Load(), int64(-1))
+				assert.Equal(peer.Task.TotalPieceCount.Load(), int32(0))
+				assert.Equal(peer.Task.DirectPiece, []byte{})
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT(), dynconfig.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePieceFinishedRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *schedulerv2.DownloadPieceFinishedRequest
+		run  func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder)
+	}{
+		{
+			name: "invalid digest",
+			req: &schedulerv2.DownloadPieceFinishedRequest{
+				Piece: &commonv2.Piece{
+					Number:      uint32(mockPiece.Number),
+					ParentId:    &mockPiece.ParentID,
+					Offset:      mockPiece.Offset,
+					Length:      mockPiece.Length,
+					Digest:      "foo",
+					TrafficType: &mockPiece.TrafficType,
+					Cost:        durationpb.New(mockPiece.Cost),
+					CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+				},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePieceFinishedRequest(peer.ID, req), status.Error(codes.InvalidArgument, "invalid digest"))
+			},
+		},
+		{
+			name: "peer can not be loaded",
+			req: &schedulerv2.DownloadPieceFinishedRequest{
+				Piece: &commonv2.Piece{
+					Number:      uint32(mockPiece.Number),
+					ParentId:    &mockPiece.ParentID,
+					Offset:      mockPiece.Offset,
+					Length:      mockPiece.Length,
+					Digest:      mockPiece.Digest.String(),
+					TrafficType: &mockPiece.TrafficType,
+					Cost:        durationpb.New(mockPiece.Cost),
+					CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+				},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePieceFinishedRequest(peer.ID, req), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+			},
+		},
+		{
+			name: "parent can not be loaded",
+			req: &schedulerv2.DownloadPieceFinishedRequest{
+				Piece: &commonv2.Piece{
+					Number:      uint32(mockPiece.Number),
+					ParentId:    &mockPiece.ParentID,
+					Offset:      mockPiece.Offset,
+					Length:      mockPiece.Length,
+					Digest:      mockPiece.Digest.String(),
+					TrafficType: &mockPiece.TrafficType,
+					Cost:        durationpb.New(mockPiece.Cost),
+					CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+				},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(req.Piece.GetParentId())).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePieceFinishedRequest(peer.ID, req))
+
+				piece, loaded := peer.LoadPiece(int32(req.Piece.Number))
+				assert.True(loaded)
+				assert.Equal(piece.Number, mockPiece.Number)
+				assert.Equal(piece.ParentID, mockPiece.ParentID)
+				assert.Equal(piece.Offset, mockPiece.Offset)
+				assert.Equal(piece.Length, mockPiece.Length)
+				assert.Equal(piece.Digest.String(), mockPiece.Digest.String())
+				assert.Equal(piece.TrafficType, mockPiece.TrafficType)
+				assert.Equal(piece.Cost, mockPiece.Cost)
+				assert.True(piece.CreatedAt.Equal(mockPiece.CreatedAt))
+				assert.Equal(peer.FinishedPieces.Count(), uint(1))
+				assert.Equal(len(peer.PieceCosts()), 1)
+				assert.NotEqual(peer.PieceUpdatedAt.Load(), 0)
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+			},
+		},
+		{
+			name: "parent can be loaded",
+			req: &schedulerv2.DownloadPieceFinishedRequest{
+				Piece: &commonv2.Piece{
+					Number:      uint32(mockPiece.Number),
+					ParentId:    &mockPiece.ParentID,
+					Offset:      mockPiece.Offset,
+					Length:      mockPiece.Length,
+					Digest:      mockPiece.Digest.String(),
+					TrafficType: &mockPiece.TrafficType,
+					Cost:        durationpb.New(mockPiece.Cost),
+					CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+				},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(req.Piece.GetParentId())).Return(peer, true).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePieceFinishedRequest(peer.ID, req))
+
+				piece, loaded := peer.LoadPiece(int32(req.Piece.Number))
+				assert.True(loaded)
+				assert.Equal(piece.Number, mockPiece.Number)
+				assert.Equal(piece.ParentID, mockPiece.ParentID)
+				assert.Equal(piece.Offset, mockPiece.Offset)
+				assert.Equal(piece.Length, mockPiece.Length)
+				assert.Equal(piece.Digest.String(), mockPiece.Digest.String())
+				assert.Equal(piece.TrafficType, mockPiece.TrafficType)
+				assert.Equal(piece.Cost, mockPiece.Cost)
+				assert.True(piece.CreatedAt.Equal(mockPiece.CreatedAt))
+				assert.Equal(peer.FinishedPieces.Count(), uint(1))
+				assert.Equal(len(peer.PieceCosts()), 1)
+				assert.NotEqual(peer.PieceUpdatedAt.Load(), 0)
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Host.UpdatedAt.Load(), 0)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, tc.req, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePieceBackToSourceFinishedRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *schedulerv2.DownloadPieceBackToSourceFinishedRequest
+		run  func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder)
+	}{
+		{
+			name: "invalid digest",
+			req: &schedulerv2.DownloadPieceBackToSourceFinishedRequest{
+				Piece: &commonv2.Piece{
+					Number:      uint32(mockPiece.Number),
+					ParentId:    &mockPiece.ParentID,
+					Offset:      mockPiece.Offset,
+					Length:      mockPiece.Length,
+					Digest:      "foo",
+					TrafficType: &mockPiece.TrafficType,
+					Cost:        durationpb.New(mockPiece.Cost),
+					CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+				},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePieceBackToSourceFinishedRequest(context.Background(), peer.ID, req), status.Error(codes.InvalidArgument, "invalid digest"))
+			},
+		},
+		{
+			name: "peer can not be loaded",
+			req: &schedulerv2.DownloadPieceBackToSourceFinishedRequest{
+				Piece: &commonv2.Piece{
+					Number:      uint32(mockPiece.Number),
+					ParentId:    &mockPiece.ParentID,
+					Offset:      mockPiece.Offset,
+					Length:      mockPiece.Length,
+					Digest:      mockPiece.Digest.String(),
+					TrafficType: &mockPiece.TrafficType,
+					Cost:        durationpb.New(mockPiece.Cost),
+					CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+				},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePieceBackToSourceFinishedRequest(context.Background(), peer.ID, req), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+			},
+		},
+		{
+			name: "cache peer can be loaded",
+			req: &schedulerv2.DownloadPieceBackToSourceFinishedRequest{
+				Piece: &commonv2.Piece{
+					Number:      uint32(mockPiece.Number),
+					ParentId:    &mockPiece.ParentID,
+					Offset:      mockPiece.Offset,
+					Length:      mockPiece.Length,
+					Digest:      mockPiece.Digest.String(),
+					TrafficType: &mockPiece.TrafficType,
+					Cost:        durationpb.New(mockPiece.Cost),
+					CreatedAt:   timestamppb.New(mockPiece.CreatedAt),
+				},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceBackToSourceFinishedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePieceBackToSourceFinishedRequest(context.Background(), peer.ID, req))
+
+				piece, loaded := peer.LoadPiece(int32(req.Piece.Number))
+				assert.True(loaded)
+				assert.Equal(piece.Number, mockPiece.Number)
+				assert.Equal(piece.ParentID, mockPiece.ParentID)
+				assert.Equal(piece.Offset, mockPiece.Offset)
+				assert.Equal(piece.Length, mockPiece.Length)
+				assert.Equal(piece.Digest.String(), mockPiece.Digest.String())
+				assert.Equal(piece.TrafficType, mockPiece.TrafficType)
+				assert.Equal(piece.Cost, mockPiece.Cost)
+				assert.True(piece.CreatedAt.Equal(mockPiece.CreatedAt))
+				assert.Equal(peer.FinishedPieces.Count(), uint(1))
+				assert.Equal(len(peer.PieceCosts()), 1)
+				assert.NotEqual(peer.PieceUpdatedAt.Load(), 0)
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+
+				piece, loaded = peer.Task.LoadPiece(int32(req.Piece.Number))
+				assert.True(loaded)
+				assert.Equal(piece.Number, mockPiece.Number)
+				assert.Equal(piece.ParentID, mockPiece.ParentID)
+				assert.Equal(piece.Offset, mockPiece.Offset)
+				assert.Equal(piece.Length, mockPiece.Length)
+				assert.Equal(piece.Digest.String(), mockPiece.Digest.String())
+				assert.Equal(piece.TrafficType, mockPiece.TrafficType)
+				assert.Equal(piece.Cost, mockPiece.Cost)
+				assert.True(piece.CreatedAt.Equal(mockPiece.CreatedAt))
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Host.UpdatedAt.Load(), 0)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, tc.req, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePieceFailedRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *schedulerv2.DownloadPieceFailedRequest
+		run  func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFailedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+			mp *standardcache.MockPeerManagerMockRecorder)
+	}{
+		{
+			name: "cache peer can not be loaded",
+			req: &schedulerv2.DownloadPieceFailedRequest{
+				ParentId:  mockSeedPeerID,
+				Temporary: true,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFailedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePieceFailedRequest(context.Background(), peer.ID, req), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+			},
+		},
+		{
+			name: "temporary is false",
+			req: &schedulerv2.DownloadPieceFailedRequest{
+				ParentId:  mockSeedPeerID,
+				Temporary: false,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFailedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePieceFailedRequest(context.Background(), peer.ID, req), status.Error(codes.FailedPrecondition, "download piece failed"))
+			},
+		},
+		{
+			name: "parent can not be loaded",
+			req: &schedulerv2.DownloadPieceFailedRequest{
+				ParentId:  mockSeedPeerID,
+				Temporary: true,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFailedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(req.GetParentId())).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePieceFailedRequest(context.Background(), peer.ID, req))
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.True(peer.BlockParents.Contains(req.GetParentId()))
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+			},
+		},
+		{
+			name: "parent can be loaded",
+			req: &schedulerv2.DownloadPieceFailedRequest{
+				ParentId:  mockSeedPeerID,
+				Temporary: true,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceFailedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(req.GetParentId())).Return(peer, true).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.NoError(svc.handleDownloadCachePieceFailedRequest(context.Background(), peer.ID, req))
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.True(peer.BlockParents.Contains(req.GetParentId()))
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+				assert.Equal(peer.Host.UploadFailedCount.Load(), int64(1))
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, tc.req, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleDownloadCachePieceBackToSourceFailedRequest(t *testing.T) {
+	mockPieceNumber := uint32(mockPiece.Number)
+
+	tests := []struct {
+		name string
+		req  *schedulerv2.DownloadPieceBackToSourceFailedRequest
+		run  func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceBackToSourceFailedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+			mp *standardcache.MockPeerManagerMockRecorder)
+	}{
+		{
+			name: "cache peer can not be loaded",
+			req:  &schedulerv2.DownloadPieceBackToSourceFailedRequest{},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceBackToSourceFailedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePieceBackToSourceFailedRequest(context.Background(), peer.ID, req), status.Errorf(codes.NotFound, "cache peer %s not found", peer.ID))
+			},
+		},
+		{
+			name: "cache peer can be loaded",
+			req: &schedulerv2.DownloadPieceBackToSourceFailedRequest{
+				PieceNumber: &mockPieceNumber,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.DownloadPieceBackToSourceFailedRequest, peer *standardcache.Peer, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder,
+				mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(peer.ID)).Return(peer, true).Times(1),
+				)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.handleDownloadCachePieceBackToSourceFailedRequest(context.Background(), peer.ID, req), status.Error(codes.Internal, "download piece from source failed"))
+				assert.NotEqual(peer.UpdatedAt.Load(), 0)
+				assert.NotEqual(peer.Task.UpdatedAt.Load(), 0)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, tc.req, peer, peerManager, cacheResource.EXPECT(), peerManager.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_handleCacheResource(t *testing.T) {
+	dgst := mockTaskDigest.String()
+	mismatchDgst := "foo"
+
+	tests := []struct {
+		name string
+		req  *schedulerv2.RegisterCachePeerRequest
+		run  func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mockHost *standardcache.Host, mockTask *standardcache.Task, mockPeer *standardcache.Peer,
+			hostManager standardcache.HostManager, taskManager standardcache.TaskManager, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+			mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder)
+	}{
+		{
+			name: "host can not be loaded",
+			req:  &schedulerv2.RegisterCachePeerRequest{},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mockHost *standardcache.Host, mockTask *standardcache.Task, mockPeer *standardcache.Peer,
+				hostManager standardcache.HostManager, taskManager standardcache.TaskManager, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(mockHost.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				_, _, _, err := svc.handleCacheResource(context.Background(), stream, mockHost.ID, mockTask.ID, mockPeer.ID, req)
+				assert.ErrorIs(err, status.Errorf(codes.NotFound, "host %s not found", mockHost.ID))
+			},
+		},
+		{
+			name: "task can be loaded",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Url:                 "foo",
+				FilteredQueryParams: []string{"bar"},
+				RequestHeader:       map[string]string{"baz": "bas"},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mockHost *standardcache.Host, mockTask *standardcache.Task, mockPeer *standardcache.Peer,
+				hostManager standardcache.HostManager, taskManager standardcache.TaskManager, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(mockHost.ID)).Return(mockHost, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(mockTask.ID)).Return(mockTask, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(mockPeer.ID)).Return(mockPeer, true).Times(1),
+				)
+
+				assert := assert.New(t)
+				host, task, _, err := svc.handleCacheResource(context.Background(), stream, mockHost.ID, mockTask.ID, mockPeer.ID, req)
+				assert.NoError(err)
+				assert.EqualValues(host, mockHost)
+				assert.Equal(task.ID, mockTask.ID)
+				assert.Equal(task.URL, req.Url)
+				assert.EqualValues(task.FilteredQueryParams, req.FilteredQueryParams)
+				assert.EqualValues(task.Header, req.RequestHeader)
+			},
+		},
+		{
+			name: "task can not be loaded",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Url:                 "foo",
+				FilteredQueryParams: []string{"bar"},
+				RequestHeader:       map[string]string{"baz": "bas"},
+				Digest:              &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mockHost *standardcache.Host, mockTask *standardcache.Task, mockPeer *standardcache.Peer,
+				hostManager standardcache.HostManager, taskManager standardcache.TaskManager, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(mockHost.ID)).Return(mockHost, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(mockTask.ID)).Return(nil, false).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Store(gomock.Any()).Return().Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(mockPeer.ID)).Return(mockPeer, true).Times(1),
+				)
+
+				assert := assert.New(t)
+				host, task, _, err := svc.handleCacheResource(context.Background(), stream, mockHost.ID, mockTask.ID, mockPeer.ID, req)
+				assert.NoError(err)
+				assert.EqualValues(host, mockHost)
+				assert.Equal(task.ID, mockTask.ID)
+				assert.Equal(task.Digest.String(), req.GetDigest())
+				assert.Equal(task.URL, req.GetUrl())
+				assert.EqualValues(task.FilteredQueryParams, req.GetFilteredQueryParams())
+				assert.EqualValues(task.Header, req.RequestHeader)
+			},
+		},
+		{
+			name: "invalid digest",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Digest: &mismatchDgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mockHost *standardcache.Host, mockTask *standardcache.Task, mockPeer *standardcache.Peer,
+				hostManager standardcache.HostManager, taskManager standardcache.TaskManager, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(mockHost.ID)).Return(mockHost, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(mockTask.ID)).Return(nil, false).Times(1),
+				)
+
+				assert := assert.New(t)
+				_, _, _, err := svc.handleCacheResource(context.Background(), stream, mockHost.ID, mockTask.ID, mockPeer.ID, req)
+				assert.ErrorIs(err, status.Error(codes.InvalidArgument, "invalid digest"))
+			},
+		},
+		{
+			name: "peer can be loaded",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Url:                 "foo",
+				FilteredQueryParams: []string{"bar"},
+				RequestHeader:       map[string]string{"baz": "bas"},
+				Digest:              &dgst,
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mockHost *standardcache.Host, mockTask *standardcache.Task, mockPeer *standardcache.Peer,
+				hostManager standardcache.HostManager, taskManager standardcache.TaskManager, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(mockHost.ID)).Return(mockHost, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(mockTask.ID)).Return(mockTask, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(mockPeer.ID)).Return(mockPeer, true).Times(1),
+				)
+
+				assert := assert.New(t)
+				host, task, peer, err := svc.handleCacheResource(context.Background(), stream, mockHost.ID, mockTask.ID, mockPeer.ID, req)
+				assert.NoError(err)
+				assert.EqualValues(host, mockHost)
+				assert.Equal(task.ID, mockTask.ID)
+				assert.Equal(task.Digest.String(), req.GetDigest())
+				assert.Equal(task.URL, req.GetUrl())
+				assert.EqualValues(task.FilteredQueryParams, req.GetFilteredQueryParams())
+				assert.EqualValues(task.Header, req.RequestHeader)
+				assert.EqualValues(peer, mockPeer)
+			},
+		},
+		{
+			name: "peer can not be loaded",
+			req: &schedulerv2.RegisterCachePeerRequest{
+				Url:                 "foo",
+				FilteredQueryParams: []string{"bar"},
+				RequestHeader:       map[string]string{"baz": "bas"},
+				Digest:              &dgst,
+				Priority:            commonv2.Priority_LEVEL1,
+				Range: &commonv2.Range{
+					Start:  uint64(mockPeerRange.Start),
+					Length: uint64(mockPeerRange.Length),
+				},
+			},
+			run: func(t *testing.T, svc *V2, req *schedulerv2.RegisterCachePeerRequest, stream schedulerv2.Scheduler_AnnounceCachePeerServer, mockHost *standardcache.Host, mockTask *standardcache.Task, mockPeer *standardcache.Peer,
+				hostManager standardcache.HostManager, taskManager standardcache.TaskManager, peerManager standardcache.PeerManager, mr *standardcache.MockResourceMockRecorder, mh *standardcache.MockHostManagerMockRecorder,
+				mt *standardcache.MockTaskManagerMockRecorder, mp *standardcache.MockPeerManagerMockRecorder) {
+				gomock.InOrder(
+					mr.HostManager().Return(hostManager).Times(1),
+					mh.Load(gomock.Eq(mockHost.ID)).Return(mockHost, true).Times(1),
+					mr.TaskManager().Return(taskManager).Times(1),
+					mt.Load(gomock.Eq(mockTask.ID)).Return(mockTask, true).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Load(gomock.Eq(mockPeer.ID)).Return(nil, false).Times(1),
+					mr.PeerManager().Return(peerManager).Times(1),
+					mp.Store(gomock.Any()).Return().Times(1),
+				)
+
+				assert := assert.New(t)
+				host, task, peer, err := svc.handleCacheResource(context.Background(), stream, mockHost.ID, mockTask.ID, mockPeer.ID, req)
+				assert.NoError(err)
+				assert.EqualValues(host, mockHost)
+				assert.Equal(task.ID, mockTask.ID)
+				assert.Equal(task.Digest.String(), req.GetDigest())
+				assert.Equal(task.URL, req.GetUrl())
+				assert.EqualValues(task.FilteredQueryParams, req.GetFilteredQueryParams())
+				assert.EqualValues(task.Header, req.RequestHeader)
+				assert.Equal(peer.ID, mockPeer.ID)
+				assert.Equal(peer.Priority, req.GetPriority())
+				assert.Equal(peer.Range.Start, int64(req.GetRange().GetStart()))
+				assert.Equal(peer.Range.Length, int64(req.GetRange().GetLength()))
+				assert.NotNil(peer.AnnouncePeerStream)
+				assert.EqualValues(peer.Host, mockHost)
+				assert.EqualValues(peer.Task, mockTask)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			hostManager := standardcache.NewMockHostManager(ctl)
+			taskManager := standardcache.NewMockTaskManager(ctl)
+			peerManager := standardcache.NewMockPeerManager(ctl)
+			stream := schedulerv2mocks.NewMockScheduler_AnnounceCachePeerServer(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			mockPeer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&config.Config{Scheduler: mockSchedulerConfig}, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, tc.req, stream, mockHost, mockTask, mockPeer, hostManager, taskManager, peerManager, cacheResource.EXPECT(), hostManager.EXPECT(), taskManager.EXPECT(), peerManager.EXPECT())
+		})
+	}
+}
+
+func TestServiceV2_downloadCacheTaskBySeedPeer(t *testing.T) {
+	tests := []struct {
+		name   string
+		config config.Config
+		run    func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder)
+	}{
+		{
+			name: "priority is Priority_LEVEL6 and enable seed peer",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				var wg sync.WaitGroup
+				wg.Add(1)
+				defer wg.Wait()
+
+				gomock.InOrder(
+					mr.SeedPeer().Return(seedPeerClient).Times(1),
+					ms.TriggerDownloadTask(gomock.All(), gomock.Any(), gomock.Any()).Do(func(context.Context, string, *dfdaemonv2.DownloadTaskRequest) { wg.Done() }).Return(nil).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL6
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.False(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL6, enable seed peer and download task failed",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				var wg sync.WaitGroup
+				wg.Add(1)
+				defer wg.Wait()
+
+				gomock.InOrder(
+					mr.SeedPeer().Return(seedPeerClient).Times(1),
+					ms.TriggerDownloadTask(gomock.All(), gomock.Any(), gomock.Any()).Do(func(context.Context, string, *dfdaemonv2.DownloadTaskRequest) { wg.Done() }).Return(errors.New("foo")).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL6
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.False(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL6 and disable seed peer",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: false,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				peer.Priority = commonv2.Priority_LEVEL6
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.True(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL5 and enable seed peer",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				var wg sync.WaitGroup
+				wg.Add(1)
+				defer wg.Wait()
+
+				gomock.InOrder(
+					mr.SeedPeer().Return(seedPeerClient).Times(1),
+					ms.TriggerDownloadTask(gomock.All(), gomock.Any(), gomock.Any()).Do(func(context.Context, string, *dfdaemonv2.DownloadTaskRequest) { wg.Done() }).Return(nil).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL5
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.False(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL5, enable seed peer and download task failed",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				var wg sync.WaitGroup
+				wg.Add(1)
+				defer wg.Wait()
+
+				gomock.InOrder(
+					mr.SeedPeer().Return(seedPeerClient).Times(1),
+					ms.TriggerDownloadTask(gomock.All(), gomock.Any(), gomock.Any()).Do(func(context.Context, string, *dfdaemonv2.DownloadTaskRequest) { wg.Done() }).Return(errors.New("foo")).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL5
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.False(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL5 and disable seed peer",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: false,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				peer.Priority = commonv2.Priority_LEVEL5
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.True(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL4 and enable seed peer",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				var wg sync.WaitGroup
+				wg.Add(1)
+				defer wg.Wait()
+
+				gomock.InOrder(
+					mr.SeedPeer().Return(seedPeerClient).Times(1),
+					ms.TriggerDownloadTask(gomock.All(), gomock.Any(), gomock.Any()).Do(func(context.Context, string, *dfdaemonv2.DownloadTaskRequest) { wg.Done() }).Return(nil).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL4
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.False(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL4, enable seed peer and download task failed",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				var wg sync.WaitGroup
+				wg.Add(1)
+				defer wg.Wait()
+
+				gomock.InOrder(
+					mr.SeedPeer().Return(seedPeerClient).Times(1),
+					ms.TriggerDownloadTask(gomock.All(), gomock.Any(), gomock.Any()).Do(func(context.Context, string, *dfdaemonv2.DownloadTaskRequest) { wg.Done() }).Return(errors.New("foo")).Times(1),
+				)
+
+				peer.Priority = commonv2.Priority_LEVEL4
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.False(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL4 and disable seed peer",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: false,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				peer.Priority = commonv2.Priority_LEVEL4
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.True(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL3",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				peer.Priority = commonv2.Priority_LEVEL3
+
+				assert := assert.New(t)
+				assert.NoError(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer))
+				assert.True(peer.NeedBackToSource.Load())
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL2",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				peer.Priority = commonv2.Priority_LEVEL2
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer), status.Errorf(codes.NotFound, "%s peer not found candidate peers", commonv2.Priority_LEVEL2.String()))
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL1",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				peer.Priority = commonv2.Priority_LEVEL1
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer), status.Errorf(codes.FailedPrecondition, "%s peer is forbidden", commonv2.Priority_LEVEL1.String()))
+			},
+		},
+		{
+			name: "priority is Priority_LEVEL0",
+			config: config.Config{
+				SeedPeer: config.SeedPeerConfig{
+					Enable: true,
+				},
+			},
+			run: func(t *testing.T, svc *V2, peer *standardcache.Peer, seedPeerClient standardcache.SeedPeer, mr *standardcache.MockResourceMockRecorder, ms *standardcache.MockSeedPeerMockRecorder) {
+				peer.Priority = commonv2.Priority(100)
+
+				assert := assert.New(t)
+				assert.ErrorIs(svc.downloadCacheTaskBySeedPeer(context.Background(), mockTaskID, &schedulerv2.RegisterCachePeerRequest{}, peer), status.Errorf(codes.InvalidArgument, "invalid priority %#v", peer.Priority))
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ctl := gomock.NewController(t)
+			defer ctl.Finish()
+			scheduling := schedulingmocks.NewMockScheduling(ctl)
+			resource := standard.NewMockResource(ctl)
+			cacheResource := standardcache.NewMockResource(ctl)
+			persistentCacheResource := persistentcache.NewMockResource(ctl)
+			dynconfig := configmocks.NewMockDynconfigInterface(ctl)
+			seedPeerClient := standardcache.NewMockSeedPeer(ctl)
+			job := jobmocks.NewMockJob(ctl)
+			internalJobImage := internaljobmocks.NewMockImage(ctl)
+
+			mockHost := standardcache.NewHost(
+				mockRawHost.ID, mockRawHost.IP, mockRawHost.Hostname,
+				mockRawHost.Port, mockRawHost.DownloadPort, mockRawHost.ProxyPort, mockRawHost.Type)
+			mockTask := standardcache.NewTask(mockTaskID, mockTaskURL, mockTaskTag, mockTaskApplication, commonv2.TaskType_CACHE, mockTaskFilteredQueryParams, mockTaskHeader, mockTaskBackToSourceLimit, standardcache.WithDigest(mockTaskDigest))
+			peer := standardcache.NewPeer(mockPeerID, mockTask, mockHost)
+			svc := NewV2(&tc.config, resource, cacheResource, persistentCacheResource, scheduling, job, internalJobImage, dynconfig)
+
+			tc.run(t, svc, peer, seedPeerClient, cacheResource.EXPECT(), seedPeerClient.EXPECT())
 		})
 	}
 }

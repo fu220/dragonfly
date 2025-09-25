@@ -24,6 +24,7 @@ import (
 	logger "d7y.io/dragonfly/v2/internal/dflog"
 	"d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	"d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 )
 
 const (
@@ -71,6 +72,12 @@ type Evaluator interface {
 
 	// IsBadPersistentCacheParent determine if persistent cache peer is a bad parent, it can not be selected as a parent.
 	IsBadPersistentCacheParent(peer *persistentcache.Peer) bool
+
+	// EvaluateCacheParents sort cache parents by evaluating multiple feature scores.
+	EvaluateCacheParents(parents []*standardcache.Peer, child *standardcache.Peer, taskPieceCount uint32) []*standardcache.Peer
+
+	// IsBadCacheParent determine if peer is a bad cache parent, it can not be selected as a cache parent.
+	IsBadCacheParent(peer *standardcache.Peer) bool
 }
 
 // evaluator is an implementation of Evaluator.
@@ -139,4 +146,43 @@ func (e *evaluator) IsBadPersistentCacheParent(peer *persistentcache.Peer) bool 
 	}
 
 	return false
+}
+
+// IsBadCacheParent determine if peer is a bad cache parent, it can not be selected as a cache parent.
+func (e *evaluator) IsBadCacheParent(peer *standardcache.Peer) bool {
+	if peer.FSM.Is(standardcache.PeerStateFailed) || peer.FSM.Is(standardcache.PeerStateLeave) || peer.FSM.Is(standardcache.PeerStatePending) ||
+		peer.FSM.Is(standardcache.PeerStateReceivedTiny) || peer.FSM.Is(standardcache.PeerStateReceivedSmall) ||
+		peer.FSM.Is(standardcache.PeerStateReceivedNormal) || peer.FSM.Is(standardcache.PeerStateReceivedEmpty) {
+		peer.Log.Debugf("cache peer is bad node because peer status is %s", peer.FSM.Current())
+		return true
+	}
+
+	// Determine whether to bad node based on piece download costs.
+	costs := stats.LoadRawData(peer.PieceCosts())
+	len := len(costs)
+	// Peer has not finished downloading enough piece.
+	if len < minAvailableCostLen {
+		logger.Debugf("cache peer %s has not finished downloading enough piece, it can't be bad node", peer.ID)
+		return false
+	}
+
+	lastCost := costs[len-1]
+	mean, _ := stats.Mean(costs[:len-1]) // nolint: errcheck
+
+	// Download costs does not meet the normal distribution,
+	// if the last cost is twenty times more than mean, it is bad node.
+	if len < normalDistributionLen {
+		isBadParent := big.NewFloat(lastCost).Cmp(big.NewFloat(mean*20)) > 0
+		logger.Debugf("cache peer %s mean is %.2f and it is bad node: %t", peer.ID, mean, isBadParent)
+		return isBadParent
+	}
+
+	// Download costs satisfies the normal distribution,
+	// last cost falling outside of three-sigma effect need to be adjusted parent,
+	// refer to https://en.wikipedia.org/wiki/68%E2%80%9395%E2%80%9399.7_rule.
+	stdev, _ := stats.StandardDeviation(costs[:len-1]) // nolint: errcheck
+	isBadParent := big.NewFloat(lastCost).Cmp(big.NewFloat(mean+3*stdev)) > 0
+	logger.Debugf("cache peer %s meet the normal distribution, costs mean is %.2f and standard deviation is %.2f, peer is bad node: %t",
+		peer.ID, mean, stdev, isBadParent)
+	return isBadParent
 }

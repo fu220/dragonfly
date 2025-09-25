@@ -16,6 +16,7 @@ import (
 	set "d7y.io/dragonfly/v2/pkg/container/set"
 	persistentcache "d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	standard "d7y.io/dragonfly/v2/scheduler/resource/standard"
+	standardcache "d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,6 +42,21 @@ func NewMockScheduling(ctrl *gomock.Controller) *MockScheduling {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockScheduling) EXPECT() *MockSchedulingMockRecorder {
 	return m.recorder
+}
+
+// FindCandidateCacheParents mocks base method.
+func (m *MockScheduling) FindCandidateCacheParents(arg0 context.Context, arg1 *standardcache.Peer, arg2 set.SafeSet[string]) ([]*standardcache.Peer, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindCandidateCacheParents", arg0, arg1, arg2)
+	ret0, _ := ret[0].([]*standardcache.Peer)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// FindCandidateCacheParents indicates an expected call of FindCandidateCacheParents.
+func (mr *MockSchedulingMockRecorder) FindCandidateCacheParents(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindCandidateCacheParents", reflect.TypeOf((*MockScheduling)(nil).FindCandidateCacheParents), arg0, arg1, arg2)
 }
 
 // FindCandidateParents mocks base method.
@@ -104,6 +120,21 @@ func (mr *MockSchedulingMockRecorder) FindReplicatePersistentCacheHosts(arg0, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindReplicatePersistentCacheHosts", reflect.TypeOf((*MockScheduling)(nil).FindReplicatePersistentCacheHosts), arg0, arg1, arg2)
 }
 
+// FindSuccessCacheParent mocks base method.
+func (m *MockScheduling) FindSuccessCacheParent(arg0 context.Context, arg1 *standardcache.Peer, arg2 set.SafeSet[string]) (*standardcache.Peer, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindSuccessCacheParent", arg0, arg1, arg2)
+	ret0, _ := ret[0].(*standardcache.Peer)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// FindSuccessCacheParent indicates an expected call of FindSuccessCacheParent.
+func (mr *MockSchedulingMockRecorder) FindSuccessCacheParent(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindSuccessCacheParent", reflect.TypeOf((*MockScheduling)(nil).FindSuccessCacheParent), arg0, arg1, arg2)
+}
+
 // FindSuccessParent mocks base method.
 func (m *MockScheduling) FindSuccessParent(arg0 context.Context, arg1 *standard.Peer, arg2 set.SafeSet[string]) (*standard.Peer, bool) {
 	m.ctrl.T.Helper()
@@ -117,6 +148,20 @@ func (m *MockScheduling) FindSuccessParent(arg0 context.Context, arg1 *standard.
 func (mr *MockSchedulingMockRecorder) FindSuccessParent(arg0, arg1, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindSuccessParent", reflect.TypeOf((*MockScheduling)(nil).FindSuccessParent), arg0, arg1, arg2)
+}
+
+// ScheduleCandidateCacheParents mocks base method.
+func (m *MockScheduling) ScheduleCandidateCacheParents(arg0 context.Context, arg1 *standardcache.Peer, arg2 set.SafeSet[string]) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ScheduleCandidateCacheParents", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ScheduleCandidateCacheParents indicates an expected call of ScheduleCandidateCacheParents.
+func (mr *MockSchedulingMockRecorder) ScheduleCandidateCacheParents(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ScheduleCandidateCacheParents", reflect.TypeOf((*MockScheduling)(nil).ScheduleCandidateCacheParents), arg0, arg1, arg2)
 }
 
 // ScheduleCandidateParents mocks base method.

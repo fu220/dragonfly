@@ -38,10 +38,10 @@ import (
 // Task is an interface for manager tasks.
 type Task interface {
 	// CreateGetTask create a get task job.
-	CreateGetTask(context.Context, []models.Scheduler, types.GetTaskArgs) (*internaljob.GroupJobState, error)
+	CreateGetTask(context.Context, []models.Scheduler, types.GetTaskArgs, string) (*internaljob.GroupJobState, error)
 
 	// CreateDeleteTask create a delete task job.
-	CreateDeleteTask(context.Context, []models.Scheduler, types.DeleteTaskArgs) (*internaljob.GroupJobState, error)
+	CreateDeleteTask(context.Context, []models.Scheduler, types.DeleteTaskArgs, string) (*internaljob.GroupJobState, error)
 }
 
 // task is an implementation of Task.
@@ -55,7 +55,7 @@ func newTask(job *internaljob.Job) Task {
 }
 
 // CreateGetTask create a get task job.
-func (t *task) CreateGetTask(ctx context.Context, schedulers []models.Scheduler, json types.GetTaskArgs) (*internaljob.GroupJobState, error) {
+func (t *task) CreateGetTask(ctx context.Context, schedulers []models.Scheduler, json types.GetTaskArgs, jobType string) (*internaljob.GroupJobState, error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanGetTask, trace.WithSpanKind(trace.SpanKindProducer))
 	span.SetAttributes(config.AttributeGetTaskID.String(json.TaskID))
@@ -63,7 +63,13 @@ func (t *task) CreateGetTask(ctx context.Context, schedulers []models.Scheduler,
 
 	taskID := json.TaskID
 	if json.URL != "" {
-		taskID = idgen.TaskIDV2ByURLBased(json.URL, json.PieceLength, json.Tag, json.Application, idgen.ParseFilteredQueryParams(json.FilteredQueryParams))
+		if jobType == internaljob.GetTaskJob {
+			taskID = idgen.TaskIDV2ByURLBased(json.URL, json.PieceLength, json.Tag, json.Application, idgen.ParseFilteredQueryParams(json.FilteredQueryParams))
+		} else if jobType == internaljob.GetCacheTaskJob {
+			taskID = idgen.CacheTaskIDV2ByURLBased(json.URL, json.PieceLength, json.Tag, json.Application, idgen.ParseFilteredQueryParams(json.FilteredQueryParams))
+		} else {
+			return nil, fmt.Errorf("undefined job type %s", jobType)
+		}
 	} else if json.ContentForCalculatingTaskID != nil {
 		taskID = idgen.TaskIDV2ByContent(*json.ContentForCalculatingTaskID)
 	}
@@ -93,7 +99,7 @@ func (t *task) CreateGetTask(ctx context.Context, schedulers []models.Scheduler,
 
 		signatures = append(signatures, &machineryv1tasks.Signature{
 			UUID:       taskUUID,
-			Name:       internaljob.GetTaskJob,
+			Name:       jobType,
 			RoutingKey: queue.String(),
 			Args:       args,
 		})
@@ -124,7 +130,7 @@ func (t *task) CreateGetTask(ctx context.Context, schedulers []models.Scheduler,
 }
 
 // CreateDeleteTask create a delete task job.
-func (t *task) CreateDeleteTask(ctx context.Context, schedulers []models.Scheduler, json types.DeleteTaskArgs) (*internaljob.GroupJobState, error) {
+func (t *task) CreateDeleteTask(ctx context.Context, schedulers []models.Scheduler, json types.DeleteTaskArgs, jobType string) (*internaljob.GroupJobState, error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanDeleteTask, trace.WithSpanKind(trace.SpanKindProducer))
 	span.SetAttributes(config.AttributeDeleteTaskID.String(json.TaskID))
@@ -132,7 +138,13 @@ func (t *task) CreateDeleteTask(ctx context.Context, schedulers []models.Schedul
 
 	taskID := json.TaskID
 	if json.URL != "" {
-		taskID = idgen.TaskIDV2ByURLBased(json.URL, json.PieceLength, json.Tag, json.Application, idgen.ParseFilteredQueryParams(json.FilteredQueryParams))
+		if jobType == internaljob.DeleteTaskJob {
+			taskID = idgen.TaskIDV2ByURLBased(json.URL, json.PieceLength, json.Tag, json.Application, idgen.ParseFilteredQueryParams(json.FilteredQueryParams))
+		} else if jobType == internaljob.DeleteCacheTaskJob {
+			taskID = idgen.CacheTaskIDV2ByURLBased(json.URL, json.PieceLength, json.Tag, json.Application, idgen.ParseFilteredQueryParams(json.FilteredQueryParams))
+		} else {
+			return nil, fmt.Errorf("undefined job type %s", jobType)
+		}
 	} else if json.ContentForCalculatingTaskID != nil {
 		taskID = idgen.TaskIDV2ByContent(*json.ContentForCalculatingTaskID)
 	}
@@ -160,7 +172,7 @@ func (t *task) CreateDeleteTask(ctx context.Context, schedulers []models.Schedul
 		}
 		signatures = append(signatures, &machineryv1tasks.Signature{
 			UUID:       taskUUID,
-			Name:       internaljob.DeleteTaskJob,
+			Name:       jobType,
 			RoutingKey: queue.String(),
 			Args:       args,
 		})

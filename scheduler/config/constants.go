@@ -35,6 +35,12 @@ const (
 
 	// DefaultSchedulerFilterParentLimit is default limit the number for filter parent.
 	DefaultSchedulerFilterParentLimit = 15
+
+	// DefaultSchedulerCandidateCacheParentLimit is default limit the number of candidate cache parent.
+	DefaultSchedulerCandidateCacheParentLimit = 4
+
+	// DefaultSchedulerFilterCacheParentLimit is default limit the number for filter cache parent.
+	DefaultSchedulerFilterCacheParentLimit = 15
 )
 
 const (

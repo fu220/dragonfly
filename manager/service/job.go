@@ -107,7 +107,7 @@ func (s *service) CreateSyncPeersJob(ctx context.Context, json types.CreateSyncP
 		return err
 	}
 
-	return s.job.SyncPeers.CreateSyncPeers(ctx, schedulers)
+	return s.job.SyncPeers.CreateSyncPeers(ctx, schedulers, json.Type)
 }
 
 func (s *service) CreatePreheatJob(ctx context.Context, json types.CreatePreheatJobRequest) (*models.Job, error) {
@@ -143,7 +143,7 @@ func (s *service) CreatePreheatJob(ctx context.Context, json types.CreatePreheat
 		return nil, err
 	}
 
-	groupJobState, err := s.job.CreatePreheat(ctx, candidateSchedulers, json.Args)
+	groupJobState, err := s.job.CreatePreheat(ctx, candidateSchedulers, json.Args, json.Type)
 	if err != nil {
 		logger.Errorf("create preheat job failed: %w", err)
 		return nil, err
@@ -198,7 +198,7 @@ func (s *service) CreateGetTaskJob(ctx context.Context, json types.CreateGetTask
 		return nil, err
 	}
 
-	groupJobState, err := s.job.CreateGetTask(ctx, schedulers, json.Args)
+	groupJobState, err := s.job.CreateGetTask(ctx, schedulers, json.Args, json.Type)
 	if err != nil {
 		logger.Errorf("create get task job failed: %w", err)
 		return nil, err
@@ -342,9 +342,16 @@ func (s *service) createGetTaskJobsSync(ctx context.Context, layers []internaljo
 	eg.SetLimit(int(json.Args.ConcurrentLayerCount))
 	for _, file := range layers {
 		eg.Go(func() error {
+			var jobType string
+			if json.Type == internaljob.GetCacheImageDistributionJob {
+				jobType = internaljob.GetCacheTaskJob
+			} else {
+				jobType = internaljob.GetTaskJob
+			}
+
 			job, err := s.createGetTaskJobSync(ctx, types.CreateGetTaskJobRequest{
 				BIO:  json.BIO,
-				Type: internaljob.GetTaskJob,
+				Type: jobType,
 				Args: types.GetTaskArgs{
 					URL:                 file.URL,
 					PieceLength:         file.PieceLength,
@@ -382,7 +389,7 @@ func (s *service) createGetTaskJobSync(ctx context.Context, json types.CreateGet
 		return nil, err
 	}
 
-	groupJobState, err := s.job.CreateGetTask(ctx, schedulers, json.Args)
+	groupJobState, err := s.job.CreateGetTask(ctx, schedulers, json.Args, json.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -551,7 +558,7 @@ func (s *service) CreateDeleteTaskJob(ctx context.Context, json types.CreateDele
 		return nil, err
 	}
 
-	groupJobState, err := s.job.CreateDeleteTask(ctx, schedulers, json.Args)
+	groupJobState, err := s.job.CreateDeleteTask(ctx, schedulers, json.Args, json.Type)
 	if err != nil {
 		logger.Errorf("create delete task job failed: %w", err)
 		return nil, err
@@ -577,7 +584,7 @@ func (s *service) CreateDeleteTaskJob(ctx context.Context, json types.CreateDele
 		return nil, err
 	}
 
-	go s.pollingJob(context.Background(), internaljob.DeleteTaskJob, job.ID, job.TaskID, 30, 300, 16)
+	go s.pollingJob(context.Background(), json.Type, job.ID, job.TaskID, 30, 300, 16)
 	return &job, nil
 }
 

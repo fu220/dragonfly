@@ -50,7 +50,7 @@ func (h *Handlers) CreateJob(ctx *gin.Context) {
 	// Collect CreateJobCount metrics.
 	metrics.CreateJobCount.WithLabelValues(json.Type).Inc()
 	switch json.Type {
-	case job.PreheatJob:
+	case job.PreheatJob, job.PreheatCacheJob:
 		var json types.CreatePreheatJobRequest
 		if err := ctx.ShouldBindBodyWith(&json, binding.JSON); err != nil {
 			ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})
@@ -64,7 +64,7 @@ func (h *Handlers) CreateJob(ctx *gin.Context) {
 		}
 
 		ctx.JSON(http.StatusOK, job)
-	case job.SyncPeersJob:
+	case job.SyncPeersJob, job.SyncCachePeersJob:
 		var json types.CreateSyncPeersJobRequest
 		if err := ctx.ShouldBindBodyWith(&json, binding.JSON); err != nil {
 			ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})
@@ -80,7 +80,7 @@ func (h *Handlers) CreateJob(ctx *gin.Context) {
 		}
 
 		ctx.JSON(http.StatusOK, http.StatusText(http.StatusOK))
-	case job.GetTaskJob:
+	case job.GetTaskJob, job.GetCacheTaskJob:
 		var json types.CreateGetTaskJobRequest
 		if err := ctx.ShouldBindBodyWith(&json, binding.JSON); err != nil {
 			ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})
@@ -99,7 +99,7 @@ func (h *Handlers) CreateJob(ctx *gin.Context) {
 		}
 
 		ctx.JSON(http.StatusOK, job)
-	case job.GetImageDistributionJob:
+	case job.GetImageDistributionJob, job.GetCacheImageDistributionJob:
 		var json types.CreateGetImageDistributionJobRequest
 		if err := ctx.ShouldBindBodyWith(&json, binding.JSON); err != nil {
 			ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})
@@ -113,7 +113,7 @@ func (h *Handlers) CreateJob(ctx *gin.Context) {
 		}
 
 		ctx.JSON(http.StatusOK, job)
-	case job.DeleteTaskJob:
+	case job.DeleteTaskJob, job.DeleteCacheTaskJob:
 		var json types.CreateDeleteTaskJobRequest
 		if err := ctx.ShouldBindBodyWith(&json, binding.JSON); err != nil {
 			ctx.JSON(http.StatusUnprocessableEntity, gin.H{"errors": err.Error()})

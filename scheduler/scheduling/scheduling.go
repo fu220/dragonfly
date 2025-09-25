@@ -38,6 +38,7 @@ import (
 	"d7y.io/dragonfly/v2/scheduler/config"
 	"d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	"d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 	"d7y.io/dragonfly/v2/scheduler/scheduling/evaluator"
 )
 
@@ -68,6 +69,17 @@ type Scheduling interface {
 
 	// FindCandidatePersistentCacheParents finds candidate persistent cache parents for the peer to download the task.
 	FindCandidatePersistentCacheParents(context.Context, *persistentcache.Peer, set.SafeSet[string]) ([]*persistentcache.Peer, bool)
+
+	// ScheduleCandidateCacheParents schedules candidate cache parents to the cache peer to download the cache task.
+	// Used only in v2 version of the grpc.
+	ScheduleCandidateCacheParents(context.Context, *standardcache.Peer, set.SafeSet[string]) error
+
+	// FindCandidateCacheParents finds candidate cache parents for the cache peer to download the cache task.
+	// Used only in v2 version of the grpc.
+	FindCandidateCacheParents(context.Context, *standardcache.Peer, set.SafeSet[string]) ([]*standardcache.Peer, bool)
+
+	// FindSuccessCacheParent finds success cache parent for the cache peer to download the cache task.
+	FindSuccessCacheParent(context.Context, *standardcache.Peer, set.SafeSet[string]) (*standardcache.Peer, bool)
 }
 
 type scheduling struct {
@@ -980,4 +992,418 @@ func constructSuccessPeerPacket(peer *standard.Peer, parent *standard.Peer, cand
 		CandidatePeers: parents,
 		Code:           commonv1.Code_Success,
 	}
+}
+
+// ScheduleCandidateCacheParents schedules candidate cache parents to the cache peer.
+// Used only in v2 version of the grpc.
+func (s *scheduling) ScheduleCandidateCacheParents(ctx context.Context, peer *standardcache.Peer, blocklist set.SafeSet[string]) error {
+	var n int
+	for {
+		select {
+		case <-ctx.Done():
+			peer.Log.Infof("context was done")
+			return ctx.Err()
+		default:
+		}
+
+		// Scheduling will send NeedBackToSourceResponse to cache peer.
+		//
+		// Condition 1: Peer's NeedBackToSource is true.
+		// Condition 2: Scheduling exceeds the RetryBackToSourceLimit.
+		if peer.Task.CanBackToSource() {
+			// Check condition 1:
+			// Peer's NeedBackToSource is true.
+			if peer.NeedBackToSource.Load() {
+				stream, loaded := peer.LoadAnnouncePeerStream()
+				if !loaded {
+					peer.Log.Error("load stream failed")
+					return status.Error(codes.FailedPrecondition, "load stream failed")
+				}
+
+				// Send NeedBackToSourceResponse to peer.
+				peer.Log.Infof("send NeedBackToSourceResponse, because of peer's NeedBackToSource is %t", peer.NeedBackToSource.Load())
+				description := fmt.Sprintf("peer's NeedBackToSource is %t", peer.NeedBackToSource.Load())
+				if err := stream.Send(&schedulerv2.AnnounceCachePeerResponse{
+					Response: &schedulerv2.AnnounceCachePeerResponse_NeedBackToSourceResponse{
+						NeedBackToSourceResponse: &schedulerv2.NeedBackToSourceResponse{
+							Description: &description,
+						},
+					},
+				}); err != nil {
+					peer.Log.Error(err)
+					return status.Error(codes.FailedPrecondition, err.Error())
+				}
+
+				return nil
+			}
+
+			// Check condition 2:
+			// The number of retry scheduling is greater than RetryBackToSourceLimit
+			if n >= s.config.RetryBackToSourceLimit {
+				stream, loaded := peer.LoadAnnouncePeerStream()
+				if !loaded {
+					peer.Log.Error("load stream failed")
+					return status.Error(codes.FailedPrecondition, "load stream failed")
+				}
+
+				// Send NeedBackToSourceResponse to peer.
+				peer.Log.Infof("send NeedBackToSourceResponse, because of scheduling exceeded RetryBackToSourceLimit %d", s.config.RetryBackToSourceLimit)
+				description := "scheduling exceeded RetryBackToSourceLimit"
+				if err := stream.Send(&schedulerv2.AnnounceCachePeerResponse{
+					Response: &schedulerv2.AnnounceCachePeerResponse_NeedBackToSourceResponse{
+						NeedBackToSourceResponse: &schedulerv2.NeedBackToSourceResponse{
+							Description: &description,
+						},
+					},
+				}); err != nil {
+					peer.Log.Error(err)
+					return status.Error(codes.FailedPrecondition, err.Error())
+				}
+
+				return nil
+			}
+		}
+
+		// Scheduling will return schedule failed.
+		//
+		// Condition 1: Scheduling exceeds the RetryLimit.
+		if n >= s.config.RetryLimit {
+			peer.Log.Errorf("scheduling failed, because of scheduling exceeded RetryLimit %d", s.config.RetryLimit)
+			return status.Error(codes.FailedPrecondition, "scheduling exceeded RetryLimit")
+		}
+
+		// Scheduling will send NormalTaskResponse to cache peer.
+		//
+		// Condition 1: Scheduling can find candidate parents.
+		if err := peer.Task.DeletePeerInEdges(peer.ID); err != nil {
+			peer.Log.Error(err)
+			return status.Error(codes.Internal, err.Error())
+		}
+
+		// Find candidate parents.
+		candidateParents, found := s.FindCandidateCacheParents(ctx, peer, blocklist)
+		if !found {
+			n++
+			peer.Log.Infof("scheduling failed in %d times, because of candidate parents not found", n)
+
+			// Sleep to avoid hot looping.
+			time.Sleep(s.config.RetryInterval)
+			continue
+		}
+
+		// Load AnnouncePeerStream from peer.
+		stream, loaded := peer.LoadAnnouncePeerStream()
+		if !loaded {
+			if err := peer.Task.DeletePeerInEdges(peer.ID); err != nil {
+				err = fmt.Errorf("peer deletes inedges failed: %w", err)
+				peer.Log.Error(err)
+				return status.Error(codes.Internal, err.Error())
+			}
+
+			peer.Log.Error("load stream failed")
+			return status.Error(codes.FailedPrecondition, "load stream failed")
+		}
+
+		// Send NormalTaskResponse to peer.
+		peer.Log.Info("send NormalTaskResponse")
+		if err := stream.Send(&schedulerv2.AnnounceCachePeerResponse{
+			Response: constructSuccessNormalCacheTaskResponse(candidateParents),
+		}); err != nil {
+			peer.Log.Error(err)
+			return status.Error(codes.FailedPrecondition, err.Error())
+		}
+
+		// Add edge from parent to peer.
+		for _, candidateParent := range candidateParents {
+			if err := peer.Task.AddPeerEdge(candidateParent, peer); err != nil {
+				err = fmt.Errorf("peer adds edge failed: %w", err)
+				peer.Log.Warn(err)
+				continue
+			}
+		}
+
+		peer.Log.Infof("scheduling success in %d times", n+1)
+		return nil
+	}
+}
+
+// FindCandidateCacheParents finds candidate cache parents for the cache peer.
+func (s *scheduling) FindCandidateCacheParents(ctx context.Context, peer *standardcache.Peer, blocklist set.SafeSet[string]) ([]*standardcache.Peer, bool) {
+	// Only PeerStateReceivedNormal and PeerStateRunning peers need to be rescheduled,
+	// and other states including the PeerStateBackToSource indicate that
+	// they have been scheduled.
+	if !(peer.FSM.Is(standardcache.PeerStateReceivedNormal) || peer.FSM.Is(standardcache.PeerStateRunning)) {
+		peer.Log.Infof("cache peer state is %s, can not schedule parent", peer.FSM.Current())
+		return []*standardcache.Peer{}, false
+	}
+
+	// Find the candidate parent that can be scheduled.
+	candidateParents := s.filterCandidateCacheParents(peer, blocklist)
+	if len(candidateParents) == 0 {
+		peer.Log.Info("can not find candidate cache parents")
+		return []*standardcache.Peer{}, false
+	}
+
+	// Sort candidate parents by evaluation score.
+	taskTotalPieceCount := peer.Task.TotalPieceCount.Load()
+	candidateParents = s.evaluator.EvaluateCacheParents(candidateParents, peer, uint32(taskTotalPieceCount))
+
+	// Get the parents with candidateParentLimit.
+	candidateCacheParentLimit := config.DefaultSchedulerCandidateCacheParentLimit
+	if config, err := s.dynconfig.GetSchedulerClusterConfig(); err == nil {
+		if config.CandidateCacheParentLimit > 0 {
+			candidateCacheParentLimit = int(config.CandidateCacheParentLimit)
+		}
+	}
+
+	if len(candidateParents) > candidateCacheParentLimit {
+		candidateParents = candidateParents[:candidateCacheParentLimit]
+	}
+
+	var parentIDs []string
+	for _, candidateParent := range candidateParents {
+		parentIDs = append(parentIDs, candidateParent.ID)
+	}
+
+	peer.Log.Infof("scheduling candidate cache parents is %#v", parentIDs)
+	return candidateParents, true
+}
+
+// constructSuccessNormalCacheTaskResponse constructs scheduling successful response of the normal cache task.
+// Used only in v2 version of the grpc.
+func constructSuccessNormalCacheTaskResponse(candidateParents []*standardcache.Peer) *schedulerv2.AnnounceCachePeerResponse_NormalCacheTaskResponse {
+	var parents []*commonv2.CachePeer
+	for _, candidateParent := range candidateParents {
+		parent := &commonv2.CachePeer{
+			Id:               candidateParent.ID,
+			Priority:         candidateParent.Priority,
+			Cost:             durationpb.New(candidateParent.Cost.Load()),
+			State:            candidateParent.FSM.Current(),
+			NeedBackToSource: candidateParent.NeedBackToSource.Load(),
+			CreatedAt:        timestamppb.New(candidateParent.CreatedAt.Load()),
+			UpdatedAt:        timestamppb.New(candidateParent.UpdatedAt.Load()),
+		}
+
+		// Set range to parent.
+		if candidateParent.Range != nil {
+			parent.Range = &commonv2.Range{
+				Start:  uint64(candidateParent.Range.Start),
+				Length: uint64(candidateParent.Range.Length),
+			}
+		}
+
+		// Set task to parent.
+		parent.Task = &commonv2.CacheTask{
+			Id:                  candidateParent.Task.ID,
+			Type:                candidateParent.Task.Type,
+			Url:                 candidateParent.Task.URL,
+			Tag:                 &candidateParent.Task.Tag,
+			Application:         &candidateParent.Task.Application,
+			FilteredQueryParams: candidateParent.Task.FilteredQueryParams,
+			RequestHeader:       candidateParent.Task.Header,
+			ContentLength:       uint64(candidateParent.Task.ContentLength.Load()),
+			PieceCount:          uint32(candidateParent.Task.TotalPieceCount.Load()),
+			SizeScope:           candidateParent.Task.SizeScope(),
+			State:               candidateParent.Task.FSM.Current(),
+			PeerCount:           uint32(candidateParent.Task.PeerCount()),
+			CreatedAt:           timestamppb.New(candidateParent.Task.CreatedAt.Load()),
+			UpdatedAt:           timestamppb.New(candidateParent.Task.UpdatedAt.Load()),
+		}
+
+		// Set digest to parent task.
+		if candidateParent.Task.Digest != nil {
+			dgst := candidateParent.Task.Digest.String()
+			parent.Task.Digest = &dgst
+		}
+
+		// Set host to parent.
+		parent.Host = &commonv2.Host{
+			Id:              candidateParent.Host.ID,
+			Type:            uint32(candidateParent.Host.Type),
+			Hostname:        candidateParent.Host.Hostname,
+			Ip:              candidateParent.Host.IP,
+			Port:            candidateParent.Host.Port,
+			DownloadPort:    candidateParent.Host.DownloadPort,
+			ProxyPort:       candidateParent.Host.ProxyPort,
+			Os:              candidateParent.Host.OS,
+			Platform:        candidateParent.Host.Platform,
+			PlatformFamily:  candidateParent.Host.PlatformFamily,
+			PlatformVersion: candidateParent.Host.PlatformVersion,
+			KernelVersion:   candidateParent.Host.KernelVersion,
+			Cpu: &commonv2.CPU{
+				LogicalCount:   candidateParent.Host.CPU.LogicalCount,
+				PhysicalCount:  candidateParent.Host.CPU.PhysicalCount,
+				Percent:        candidateParent.Host.CPU.Percent,
+				ProcessPercent: candidateParent.Host.CPU.ProcessPercent,
+				Times: &commonv2.CPUTimes{
+					User:      candidateParent.Host.CPU.Times.User,
+					System:    candidateParent.Host.CPU.Times.System,
+					Idle:      candidateParent.Host.CPU.Times.Idle,
+					Nice:      candidateParent.Host.CPU.Times.Nice,
+					Iowait:    candidateParent.Host.CPU.Times.Iowait,
+					Irq:       candidateParent.Host.CPU.Times.Irq,
+					Softirq:   candidateParent.Host.CPU.Times.Softirq,
+					Steal:     candidateParent.Host.CPU.Times.Steal,
+					Guest:     candidateParent.Host.CPU.Times.Guest,
+					GuestNice: candidateParent.Host.CPU.Times.GuestNice,
+				},
+			},
+			Memory: &commonv2.Memory{
+				Total:              candidateParent.Host.Memory.Total,
+				Available:          candidateParent.Host.Memory.Available,
+				Used:               candidateParent.Host.Memory.Used,
+				UsedPercent:        candidateParent.Host.Memory.UsedPercent,
+				ProcessUsedPercent: candidateParent.Host.Memory.ProcessUsedPercent,
+				Free:               candidateParent.Host.Memory.Free,
+			},
+			Network: &commonv2.Network{
+				TcpConnectionCount:       candidateParent.Host.Network.TCPConnectionCount,
+				UploadTcpConnectionCount: candidateParent.Host.Network.UploadTCPConnectionCount,
+				Location:                 &candidateParent.Host.Network.Location,
+				Idc:                      &candidateParent.Host.Network.IDC,
+				RxBandwidth:              &candidateParent.Host.Network.RxBandwidth,
+				MaxRxBandwidth:           candidateParent.Host.Network.MaxRxBandwidth,
+				TxBandwidth:              &candidateParent.Host.Network.TxBandwidth,
+				MaxTxBandwidth:           candidateParent.Host.Network.MaxTxBandwidth,
+			},
+			Disk: &commonv2.Disk{
+				Total:             candidateParent.Host.Disk.Total,
+				Free:              candidateParent.Host.Disk.Free,
+				Used:              candidateParent.Host.Disk.Used,
+				UsedPercent:       candidateParent.Host.Disk.UsedPercent,
+				InodesTotal:       candidateParent.Host.Disk.InodesTotal,
+				InodesUsed:        candidateParent.Host.Disk.InodesUsed,
+				InodesFree:        candidateParent.Host.Disk.InodesFree,
+				InodesUsedPercent: candidateParent.Host.Disk.InodesUsedPercent,
+				WriteBandwidth:    candidateParent.Host.Disk.WriteBandwidth,
+				ReadBandwidth:     candidateParent.Host.Disk.ReadBandwidth,
+			},
+			Build: &commonv2.Build{
+				GitVersion: candidateParent.Host.Build.GitVersion,
+				GitCommit:  &candidateParent.Host.Build.GitCommit,
+				GoVersion:  &candidateParent.Host.Build.GoVersion,
+				Platform:   &candidateParent.Host.Build.Platform,
+			},
+		}
+
+		parents = append(parents, parent)
+	}
+
+	return &schedulerv2.AnnounceCachePeerResponse_NormalCacheTaskResponse{
+		NormalCacheTaskResponse: &schedulerv2.NormalCacheTaskResponse{
+			CandidateParents: parents,
+		},
+	}
+}
+
+// filterCandidateCacheParents filters the candidate cache parents that can be scheduled.
+func (s *scheduling) filterCandidateCacheParents(peer *standardcache.Peer, blocklist set.SafeSet[string]) []*standardcache.Peer {
+	filterCacheParentLimit := config.DefaultSchedulerFilterCacheParentLimit
+	if config, err := s.dynconfig.GetSchedulerClusterConfig(); err == nil {
+		if config.FilterCacheParentLimit > 0 {
+			filterCacheParentLimit = int(config.FilterCacheParentLimit)
+		}
+	}
+
+	var (
+		candidateParents   []*standardcache.Peer
+		candidateParentIDs []string
+	)
+	for _, candidateParent := range peer.Task.LoadRandomPeers(uint(filterCacheParentLimit)) {
+		// Candidate parent is in blocklist.
+		if blocklist.Contains(candidateParent.ID) {
+			peer.Log.Debugf("parent %s host %s is not selected because it is in blocklist", candidateParent.ID, candidateParent.Host.ID)
+			continue
+		}
+
+		// Candidate parent is disable shared.
+		if candidateParent.Host.DisableShared {
+			peer.Log.Debugf("parent %s host %s is not selected because it is disable shared", candidateParent.ID, candidateParent.Host.ID)
+			continue
+		}
+
+		// Candidate parent host is not allowed to be the same as the peer host,
+		// because dfdaemon cannot handle the situation
+		// where two tasks are downloading and downloading each other.
+		if peer.Host.ID == candidateParent.Host.ID {
+			peer.Log.Debugf("parent %s host %s is the same as peer host", candidateParent.ID, candidateParent.Host.ID)
+			continue
+		}
+
+		// Candidate parent can not find in dag.
+		inDegree, err := peer.Task.PeerInDegree(candidateParent.ID)
+		if err != nil {
+			peer.Log.Debugf("can not find parent %s host %s vertex in dag", candidateParent.ID, candidateParent.Host.ID)
+			continue
+		}
+
+		// Parent can be parent of the peer:
+		// Condition 1: Parent has parent.
+		// Condition 2: Parent has been back-to-source.
+		// Condition 3: Parent has been succeeded.
+		// Condition 4: Parent is seed peer.
+		if candidateParent.Host.Type == types.HostTypeNormal && inDegree == 0 && !candidateParent.FSM.Is(standard.PeerStateBackToSource) &&
+			!candidateParent.FSM.Is(standard.PeerStateSucceeded) {
+			peer.Log.Debugf("parent %s host %s is not selected, because its download state is %d %d %s",
+				candidateParent.ID, candidateParent.Host.ID, inDegree, int(candidateParent.Host.Type), candidateParent.FSM.Current())
+			continue
+		}
+
+		// Candidate parent is bad parent.
+		if s.evaluator.IsBadCacheParent(candidateParent) {
+			peer.Log.Debugf("parent %s host %s is not selected because it is bad node", candidateParent.ID, candidateParent.Host.ID)
+			continue
+		}
+
+		// Candidate parent's free upload is empty.
+		if candidateParent.Host.FreeUploadCount() <= 0 {
+			peer.Log.Debugf("parent %s host %s is not selected because its free upload is empty, upload limit is %d, upload count is %d",
+				candidateParent.ID, candidateParent.Host.ID, candidateParent.Host.ConcurrentUploadLimit.Load(), candidateParent.Host.ConcurrentUploadCount.Load())
+			continue
+		}
+
+		// Candidate parent can add edge with peer.
+		if !peer.Task.CanAddPeerEdge(candidateParent.ID, peer.ID) {
+			peer.Log.Debugf("can not add edge with parent %s host %s", candidateParent.ID, candidateParent.Host.ID)
+			continue
+		}
+
+		candidateParents = append(candidateParents, candidateParent)
+		candidateParentIDs = append(candidateParentIDs, candidateParent.ID)
+	}
+
+	peer.Log.Infof("filter candidate cache parents is %#v", candidateParentIDs)
+	return candidateParents
+}
+
+// FindSuccessCacheParent finds success cache parent for the cache peer.
+func (s *scheduling) FindSuccessCacheParent(ctx context.Context, peer *standardcache.Peer, blocklist set.SafeSet[string]) (*standardcache.Peer, bool) {
+	// Only PeerStateRunning cache peers need to be rescheduled,
+	// and other states including the PeerStateBackToSource indicate that
+	// they have been scheduled.
+	if !peer.FSM.Is(standardcache.PeerStateRunning) {
+		peer.Log.Infof("cache peer state is %s, can not schedule parent", peer.FSM.Current())
+		return nil, false
+	}
+
+	// Find the candidate parent that can be scheduled.
+	candidateParents := s.filterCandidateCacheParents(peer, blocklist)
+	if len(candidateParents) == 0 {
+		peer.Log.Info("can not find candidate cache parents")
+		return nil, false
+	}
+
+	var successParents []*standardcache.Peer
+	for _, candidateParent := range candidateParents {
+		if candidateParent.FSM.Is(standardcache.PeerStateSucceeded) {
+			successParents = append(successParents, candidateParent)
+		}
+	}
+
+	// Sort candidate parents by evaluation score.
+	taskTotalPieceCount := peer.Task.TotalPieceCount.Load()
+	successParents = s.evaluator.EvaluateCacheParents(successParents, peer, uint32(taskTotalPieceCount))
+
+	peer.Log.Infof("scheduling success cache parent is %s", successParents[0].ID)
+	return successParents[0], true
 }

@@ -104,3 +104,85 @@ func (s *service) GetPeers(ctx context.Context, q types.GetPeersQuery) ([]models
 
 	return peers, count, nil
 }
+
+func (s *service) CreateCachePeer(ctx context.Context, json types.CreatePeerRequest) (*models.CachePeer, error) {
+	peer := models.CachePeer{
+		Hostname:           json.Hostname,
+		Type:               json.Type,
+		IDC:                json.IDC,
+		Location:           json.Location,
+		IP:                 json.IP,
+		Port:               json.Port,
+		DownloadPort:       json.DownloadPort,
+		ProxyPort:          json.ProxyPort,
+		ObjectStoragePort:  json.ObjectStoragePort,
+		State:              json.State,
+		OS:                 json.OS,
+		Platform:           json.Platform,
+		PlatformFamily:     json.PlatformFamily,
+		PlatformVersion:    json.PlatformVersion,
+		KernelVersion:      json.KernelVersion,
+		GitVersion:         json.GitVersion,
+		GitCommit:          json.GitCommit,
+		BuildPlatform:      json.BuildPlatform,
+		SchedulerClusterID: json.SchedulerClusterID,
+	}
+
+	if err := s.db.WithContext(ctx).Create(&peer).Error; err != nil {
+		return nil, err
+	}
+
+	return &peer, nil
+}
+
+func (s *service) DestroyCachePeer(ctx context.Context, id uint) error {
+	peer := models.CachePeer{}
+	if err := s.db.WithContext(ctx).First(&peer, id).Error; err != nil {
+		return err
+	}
+
+	if err := s.db.WithContext(ctx).Unscoped().Unscoped().Delete(&models.CachePeer{}, id).Error; err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *service) GetCachePeer(ctx context.Context, id uint) (*models.CachePeer, error) {
+	peer := models.CachePeer{}
+	if err := s.db.WithContext(ctx).First(&peer, id).Error; err != nil {
+		return nil, err
+	}
+
+	return &peer, nil
+}
+
+func (s *service) GetCachePeers(ctx context.Context, q types.GetPeersQuery) ([]models.CachePeer, int64, error) {
+	var count int64
+	var peers []models.CachePeer
+	if err := s.db.WithContext(ctx).Preload("SchedulerCluster").Scopes(models.Paginate(q.Page, q.PerPage)).Where(&models.CachePeer{
+		Type:               q.Type,
+		Hostname:           q.Hostname,
+		IDC:                q.IDC,
+		Location:           q.Location,
+		IP:                 q.IP,
+		Port:               q.Port,
+		DownloadPort:       q.DownloadPort,
+		ProxyPort:          q.ProxyPort,
+		ObjectStoragePort:  q.ObjectStoragePort,
+		State:              q.State,
+		OS:                 q.OS,
+		Platform:           q.Platform,
+		PlatformFamily:     q.PlatformFamily,
+		PlatformVersion:    q.PlatformVersion,
+		KernelVersion:      q.KernelVersion,
+		GitVersion:         q.GitVersion,
+		GitCommit:          q.GitCommit,
+		BuildPlatform:      q.BuildPlatform,
+		SchedulerClusterID: q.SchedulerClusterID,
+	}).Find(&peers).Limit(-1).Offset(-1).Count(&count).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return peers, count, nil
+}

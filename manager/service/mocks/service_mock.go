@@ -160,6 +160,21 @@ func (mr *MockServiceMockRecorder) CreateBucket(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBucket", reflect.TypeOf((*MockService)(nil).CreateBucket), arg0, arg1)
 }
 
+// CreateCachePeer mocks base method.
+func (m *MockService) CreateCachePeer(arg0 context.Context, arg1 types.CreatePeerRequest) (*models.CachePeer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateCachePeer", arg0, arg1)
+	ret0, _ := ret[0].(*models.CachePeer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateCachePeer indicates an expected call of CreateCachePeer.
+func (mr *MockServiceMockRecorder) CreateCachePeer(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateCachePeer", reflect.TypeOf((*MockService)(nil).CreateCachePeer), arg0, arg1)
+}
+
 // CreateCluster mocks base method.
 func (m *MockService) CreateCluster(arg0 context.Context, arg1 types.CreateClusterRequest) (*types.CreateClusterResponse, error) {
 	m.ctrl.T.Helper()
@@ -471,6 +486,20 @@ func (mr *MockServiceMockRecorder) DestroyBucket(arg0, arg1 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DestroyBucket", reflect.TypeOf((*MockService)(nil).DestroyBucket), arg0, arg1)
 }
 
+// DestroyCachePeer mocks base method.
+func (m *MockService) DestroyCachePeer(arg0 context.Context, arg1 uint) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DestroyCachePeer", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DestroyCachePeer indicates an expected call of DestroyCachePeer.
+func (mr *MockServiceMockRecorder) DestroyCachePeer(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DestroyCachePeer", reflect.TypeOf((*MockService)(nil).DestroyCachePeer), arg0, arg1)
+}
+
 // DestroyCluster mocks base method.
 func (m *MockService) DestroyCluster(arg0 context.Context, arg1 uint) error {
 	m.ctrl.T.Helper()
@@ -715,6 +744,37 @@ func (m *MockService) GetBuckets(arg0 context.Context) ([]*objectstorage.BucketM
 func (mr *MockServiceMockRecorder) GetBuckets(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBuckets", reflect.TypeOf((*MockService)(nil).GetBuckets), arg0)
+}
+
+// GetCachePeer mocks base method.
+func (m *MockService) GetCachePeer(arg0 context.Context, arg1 uint) (*models.CachePeer, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCachePeer", arg0, arg1)
+	ret0, _ := ret[0].(*models.CachePeer)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCachePeer indicates an expected call of GetCachePeer.
+func (mr *MockServiceMockRecorder) GetCachePeer(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachePeer", reflect.TypeOf((*MockService)(nil).GetCachePeer), arg0, arg1)
+}
+
+// GetCachePeers mocks base method.
+func (m *MockService) GetCachePeers(arg0 context.Context, arg1 types.GetPeersQuery) ([]models.CachePeer, int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCachePeers", arg0, arg1)
+	ret0, _ := ret[0].([]models.CachePeer)
+	ret1, _ := ret[1].(int64)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetCachePeers indicates an expected call of GetCachePeers.
+func (mr *MockServiceMockRecorder) GetCachePeers(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCachePeers", reflect.TypeOf((*MockService)(nil).GetCachePeers), arg0, arg1)
 }
 
 // GetCluster mocks base method.

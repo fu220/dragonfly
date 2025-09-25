@@ -55,7 +55,7 @@ const (
 // Preheat is an interface for preheat job.
 type Preheat interface {
 	// CreatePreheat creates a preheat job.
-	CreatePreheat(context.Context, []models.Scheduler, types.PreheatArgs) (*internaljob.GroupJobState, error)
+	CreatePreheat(context.Context, []models.Scheduler, types.PreheatArgs, string) (*internaljob.GroupJobState, error)
 }
 
 // preheat is an implementation of Preheat.
@@ -77,7 +77,7 @@ func newPreheat(job *internaljob.Job, internalJobImage internaljob.Image, rootCA
 }
 
 // CreatePreheat creates a preheat job.
-func (p *preheat) CreatePreheat(ctx context.Context, schedulers []models.Scheduler, json types.PreheatArgs) (*internaljob.GroupJobState, error) {
+func (p *preheat) CreatePreheat(ctx context.Context, schedulers []models.Scheduler, json types.PreheatArgs, jobType string) (*internaljob.GroupJobState, error) {
 	var span trace.Span
 	ctx, span = tracer.Start(ctx, config.SpanPreheat, trace.WithSpanKind(trace.SpanKindProducer))
 	span.SetAttributes(config.AttributePreheatType.String(json.Type))
@@ -160,11 +160,11 @@ func (p *preheat) CreatePreheat(ctx context.Context, schedulers []models.Schedul
 		return nil, err
 	}
 
-	return p.createGroupJob(ctx, files, queues)
+	return p.createGroupJob(ctx, files, queues, jobType)
 }
 
 // createGroupJob creates a group job.
-func (p *preheat) createGroupJob(ctx context.Context, files []*internaljob.PreheatRequest, queues []internaljob.Queue) (*internaljob.GroupJobState, error) {
+func (p *preheat) createGroupJob(ctx context.Context, files []*internaljob.PreheatRequest, queues []internaljob.Queue, jobType string) (*internaljob.GroupJobState, error) {
 	groupUUID := fmt.Sprintf("group_%s", uuid.New().String())
 	var signatures []*machineryv1tasks.Signature
 	for _, queue := range queues {
@@ -181,7 +181,7 @@ func (p *preheat) createGroupJob(ctx context.Context, files []*internaljob.Prehe
 
 			signatures = append(signatures, &machineryv1tasks.Signature{
 				UUID:       taskUUID,
-				Name:       internaljob.PreheatJob,
+				Name:       jobType,
 				RoutingKey: queue.String(),
 				Args:       args,
 			})

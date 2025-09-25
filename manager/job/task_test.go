@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"d7y.io/dragonfly/v2/internal/job"
+	internaljob "d7y.io/dragonfly/v2/internal/job"
 	"d7y.io/dragonfly/v2/manager/models"
 	"d7y.io/dragonfly/v2/manager/types"
 )
@@ -74,7 +75,7 @@ func TestTask_CreateGetTask(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := task.CreateGetTask(context.TODO(), tc.schedulers, tc.args)
+			res, err := task.CreateGetTask(context.TODO(), tc.schedulers, tc.args, internaljob.GetTaskJob)
 			tc.expect(t, res, err)
 		})
 	}
@@ -125,7 +126,7 @@ func TestTask_CreateDeleteTask(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			res, err := tk.CreateDeleteTask(context.TODO(), tc.schedulers, tc.args)
+			res, err := tk.CreateDeleteTask(context.TODO(), tc.schedulers, tc.args, internaljob.DeleteTaskJob)
 			tc.expect(t, res, err)
 		})
 	}

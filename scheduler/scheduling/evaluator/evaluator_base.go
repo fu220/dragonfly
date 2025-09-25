@@ -23,6 +23,7 @@ import (
 	"d7y.io/dragonfly/v2/pkg/types"
 	"d7y.io/dragonfly/v2/scheduler/resource/persistentcache"
 	"d7y.io/dragonfly/v2/scheduler/resource/standard"
+	"d7y.io/dragonfly/v2/scheduler/resource/standardcache"
 )
 
 const (
@@ -117,6 +118,61 @@ func (e *evaluatorBase) calculatePieceScore(parentFinishedPieceCount uint, child
 	// Use the difference between the parent node and the child node to
 	// download the piece to roughly represent the piece score.
 	return float64(parentFinishedPieceCount) - float64(childFinishedPieceCount)
+}
+
+// EvaluateCacheParents sort cache parents by evaluating multiple feature scores.
+func (e *evaluatorBase) EvaluateCacheParents(parents []*standardcache.Peer, child *standardcache.Peer, totalPieceCount uint32) []*standardcache.Peer {
+	sort.Slice(
+		parents,
+		func(i, j int) bool {
+			return e.evaluateCacheParents(parents[i], child, totalPieceCount) > e.evaluateCacheParents(parents[j], child, totalPieceCount)
+		},
+	)
+
+	return parents
+}
+
+// evaluateCacheParents sort parents by evaluating multiple feature scores.
+func (e *evaluatorBase) evaluateCacheParents(parent *standardcache.Peer, child *standardcache.Peer, totalPieceCount uint32) float64 {
+	parentLocation := parent.Host.Network.Location
+	parentIDC := parent.Host.Network.IDC
+	childLocation := child.Host.Network.Location
+	childIDC := child.Host.Network.IDC
+
+	return finishedPieceWeight*e.calculatePieceScore(parent.FinishedPieces.Count(), child.FinishedPieces.Count(), totalPieceCount) +
+		parentHostUploadSuccessWeight*e.calculateParentHostUploadSuccessScore(parent.Host.UploadCount.Load(), parent.Host.UploadFailedCount.Load()) +
+		freeUploadWeight*e.calculateCacheFreeUploadScore(parent.Host) +
+		hostTypeWeight*e.calculateCacheHostTypeScore(parent) +
+		idcAffinityWeight*e.calculateIDCAffinityScore(parentIDC, childIDC) +
+		locationAffinityWeight*e.calculateMultiElementAffinityScore(parentLocation, childLocation)
+}
+
+// calculateCacheFreeUploadScore 0.0~1.0 larger and better.
+func (e *evaluatorBase) calculateCacheFreeUploadScore(host *standardcache.Host) float64 {
+	ConcurrentUploadLimit := host.ConcurrentUploadLimit.Load()
+	freeUploadCount := host.FreeUploadCount()
+	if ConcurrentUploadLimit > 0 && freeUploadCount > 0 {
+		return float64(freeUploadCount) / float64(ConcurrentUploadLimit)
+	}
+
+	return minScore
+}
+
+// calculateCacheHostTypeScore 0.0~1.0 larger and better.
+func (e *evaluatorBase) calculateCacheHostTypeScore(peer *standardcache.Peer) float64 {
+	// When the task is downloaded for the first time,
+	// peer will be scheduled to seed peer first,
+	// otherwise it will be scheduled to dfdaemon first.
+	if peer.Host.Type != types.HostTypeNormal {
+		if peer.FSM.Is(standardcache.PeerStateReceivedNormal) ||
+			peer.FSM.Is(standardcache.PeerStateRunning) {
+			return maxScore
+		}
+
+		return minScore
+	}
+
+	return maxScore * 0.5
 }
 
 // calculateParentHostUploadSuccessScore 0.0~unlimited larger and better.

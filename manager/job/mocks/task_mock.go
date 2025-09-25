@@ -44,31 +44,31 @@ func (m *MockTask) EXPECT() *MockTaskMockRecorder {
 }
 
 // CreateDeleteTask mocks base method.
-func (m *MockTask) CreateDeleteTask(arg0 context.Context, arg1 []models.Scheduler, arg2 types.DeleteTaskArgs) (*job.GroupJobState, error) {
+func (m *MockTask) CreateDeleteTask(arg0 context.Context, arg1 []models.Scheduler, arg2 types.DeleteTaskArgs, arg3 string) (*job.GroupJobState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateDeleteTask", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "CreateDeleteTask", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*job.GroupJobState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateDeleteTask indicates an expected call of CreateDeleteTask.
-func (mr *MockTaskMockRecorder) CreateDeleteTask(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockTaskMockRecorder) CreateDeleteTask(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDeleteTask", reflect.TypeOf((*MockTask)(nil).CreateDeleteTask), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateDeleteTask", reflect.TypeOf((*MockTask)(nil).CreateDeleteTask), arg0, arg1, arg2, arg3)
 }
 
 // CreateGetTask mocks base method.
-func (m *MockTask) CreateGetTask(arg0 context.Context, arg1 []models.Scheduler, arg2 types.GetTaskArgs) (*job.GroupJobState, error) {
+func (m *MockTask) CreateGetTask(arg0 context.Context, arg1 []models.Scheduler, arg2 types.GetTaskArgs, arg3 string) (*job.GroupJobState, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateGetTask", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "CreateGetTask", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(*job.GroupJobState)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateGetTask indicates an expected call of CreateGetTask.
-func (mr *MockTaskMockRecorder) CreateGetTask(arg0, arg1, arg2 any) *gomock.Call {
+func (mr *MockTaskMockRecorder) CreateGetTask(arg0, arg1, arg2, arg3 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateGetTask", reflect.TypeOf((*MockTask)(nil).CreateGetTask), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateGetTask", reflect.TypeOf((*MockTask)(nil).CreateGetTask), arg0, arg1, arg2, arg3)
 }
